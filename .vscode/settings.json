@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "*.ejs": "html",
+        "*.sage": "python",
+        "*.✨": "mojo",
+        "random": "c"
+    }
+}
