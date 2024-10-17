@@ -1,6 +1,18 @@
 import random, time
 from gf2bv import LinearSystem
 from gf2bv.crypto.mt import MT19937
+from time import perf_counter
+from contextlib import contextmanager
+
+
+@contextmanager
+def timeit(task_name):
+    start = perf_counter()
+    try:
+        yield
+    finally:
+        end = perf_counter()
+        print(f"{task_name} took {end - start:.2f} seconds")
 
 
 def mt19937(bs):
@@ -15,11 +27,11 @@ def mt19937(bs):
     mt = lin.gens()
 
     rng = MT19937(mt)
-    zeros = [rng.getrandbits(bs) ^ o for o in out] + [mt[0] ^ 0x80000000]
+    with timeit("generate system"):
+        zeros = [rng.getrandbits(bs) ^ o for o in out] + [mt[0] ^ 0x80000000]
     print("solving...")
-    start = time.time()
-    sol = lin.solve_one(zeros)
-    print("time:", time.time() - start)
+    with timeit("solve_one"):
+        sol = lin.solve_one(zeros)
     print("solved", sol[:10])
     assert sol == st
 
