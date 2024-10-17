@@ -7,15 +7,15 @@ class BitVec:
         self._sys = sys
         self._st = st
 
+    def __len__(self):
+        return len(self._st)
+
     def _cast_int(self, n: int):
         if n < 0:
             raise ValueError("Negative value")
-        st = []
+        st = [0] * len(self._st)
         for i in range(len(self._st)):
-            if n & 1:
-                st.append(1)
-            else:
-                st.append(0)
+            st[i] = n & 1
             n >>= 1
         return BitVec(self._sys, st)
 
@@ -55,11 +55,32 @@ class BitVec:
 
     __rand__ = __and__
 
+    def __or__(self, mask: int):
+        if mask < 0:
+            raise ValueError("Negative value")
+        vecs = self._st[:]
+        for i in range(len(self._st)):
+            if mask & 1:
+                vecs[i] = 1
+            mask >>= 1
+        return BitVec(self._sys, vecs)
+
+    __ror__ = __or__
+
     def rotr(self, n: int):
         return BitVec(self._sys, self._st[n:] + self._st[:n])
 
     def rotl(self, n: int):
         return BitVec(self._sys, self._st[-n:] + self._st[:-n])
+
+    def sum(self):
+        t = 0
+        for x in self._st:
+            t ^= x
+        return BitVec(self._sys, [t])
+
+    def zeroext(self, n: int):
+        return BitVec(self._sys, self._st + [0] * n)
 
     def copy(self, n: int, m: int):
         """
