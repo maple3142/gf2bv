@@ -14,10 +14,18 @@
 #define GET_OB_DIGITS(o) ((o)->ob_digit)
 #endif
 
+static PyObject *mzd_vector_to_pylong(char *buf, mzd_t *v) {
+	rci_t len = v->ncols;
+	// buf[len] must be 0
+	for (int c = 0; c < len; c++) {
+		buf[len - 1 - c] = mzd_read_bit(v, 0, c) ? '1' : '0';
+	}
+	return PyLong_FromString(buf, NULL, 2);
+}
+
 // iterator reference: https://github.com/Lydxn/xorsat/blob/789fed013292f060c026be8d1990631041969e40/xorsat/_xorsatmodule.c#L1377
 typedef struct {
-	PyObject_HEAD rci_t cols;
-	mzd_t *sol0;
+	PyObject_HEAD mzd_t *sol0;
 	mzd_t *kernel;
 	uint8_t *state;
 	char *str;
@@ -48,11 +56,8 @@ static PyObject *solveiter_next(SolutionIterObject *it) {
 	}
 	it->state[n] = sentinel;
 
-	for (rci_t c = 0; c < it->cols; c++) {
-		it->str[it->cols - 1 - c] = mzd_read_bit(result, 0, c) ? '1' : '0';
-	}
+	PyObject *ret = mzd_vector_to_pylong(it->str, result);
 	mzd_free(result);
-	PyObject *ret = PyLong_FromString(it->str, NULL, 2);
 	return ret;
 }
 
@@ -142,6 +147,8 @@ static PyObject *solve(PyObject *self, PyObject *args) {
 			if (all) {
 				A_copy = mzd_copy(NULL, A);
 			}
+			// printf("A->nrows: %d, A->ncols: %d\n", A->nrows, A->ncols);
+			// printf("B->nrows: %d, B->ncols: %d\n", B->nrows, B->ncols);
 			// this is actually solve_right in Sage...
 			if (mzd_solve_left(A, B, 0, 1) != 0) {
 				mzd_free(A);
@@ -152,6 +159,7 @@ static PyObject *solve(PyObject *self, PyObject *args) {
 				return Py_None;
 			}
 			// the base solution is stored in B as column vector
+			B->nrows = cols;
 			sol0 = mzd_transpose(0, B);
 			mzd_free(A);  // A is overwritten by mzd_solve_left
 			A = A_copy;
@@ -167,12 +175,8 @@ static PyObject *solve(PyObject *self, PyObject *args) {
 	// if we only need one solution, return it
 	if (!all) {
 		char *str = malloc(cols + 1);
-		for (int c = 0; c < cols; c++) {
-			str[cols - 1 - c] = mzd_read_bit(sol0, 0, c) ? '1' : '0';
-		}
 		str[cols] = '\0';
-
-		PyObject *ret = PyLong_FromString(str, NULL, 2);
+		PyObject *ret = mzd_vector_to_pylong(str, sol0);
 		free(str);
 		mzd_free(sol0);
 		if (A) {
@@ -199,7 +203,6 @@ static PyObject *solve(PyObject *self, PyObject *args) {
 
 	SolutionIterObject *it =
 	    PyObject_GC_New(SolutionIterObject, &SolutionIter_Type);
-	it->cols = cols;
 	it->sol0 = sol0;
 	it->kernel = tker;
 	it->state = malloc(tker->nrows + 1);
