@@ -5,3 +5,4 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "gf2bv"
 version = "0.1.0"
+description = "Solving linear systems over GF(2) by manipulating bitvectors"
