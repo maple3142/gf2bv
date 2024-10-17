@@ -30,7 +30,7 @@ class MersenneTwister:
     def twist(self):
         for i in range(self.n):
             y = (self.mt[i] & self.umsk) ^ (self.mt[(i + 1) % self.n] & self.lmsk)
-            sel = y.copy(0, 32) & self.a if isinstance(y, BitVec) else (y & 1) * self.a
+            sel = y[0].dup(32) & self.a if isinstance(y, BitVec) else (y & 1) * self.a
             self.mt[i] = self.mt[(i + self.m) % self.n] ^ (y >> 1) ^ sel
 
     def temper(self, y):

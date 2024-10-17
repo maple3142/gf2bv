@@ -3,9 +3,14 @@ from .pym4ri import solve
 
 
 class BitVec:
+    __slots__ = ("_sys", "_st")
+
     def __init__(self, sys: "LinearSystem", st: list[int]):
         self._sys = sys
         self._st = st
+
+    def __copy__(self):
+        return BitVec(self._sys, self._st[:])
 
     def __len__(self):
         return len(self._st)
@@ -19,16 +24,20 @@ class BitVec:
             n >>= 1
         return BitVec(self._sys, st)
 
-    def _check_other(self, other: "BitVec"):
+    def _check_sys(self, other: "BitVec"):
         if self._sys is not other._sys:
             raise ValueError("Cannot mix bitvecs from different systems")
+
+    def _check_len(self, other: "BitVec"):
         if len(self._st) != len(other._st):
             raise ValueError("Cannot mix bitvecs of different lengths")
 
     def __xor__(self, other: Union["BitVec", int]):
         if not isinstance(other, BitVec):
-            return self ^ self._cast_int(other)
-        self._check_other(other)
+            other = self._cast_int(other)
+        else:
+            self._check_sys(other)
+            self._check_len(other)
         return BitVec(self._sys, [a ^ b for a, b in zip(self._st, other._st)])
 
     __rxor__ = __xor__
@@ -82,11 +91,20 @@ class BitVec:
     def zeroext(self, n: int):
         return BitVec(self._sys, self._st + [0] * n)
 
-    def copy(self, n: int, m: int):
-        """
-        Construct a new bitvec by copying the n-th element m times
-        """
-        return BitVec(self._sys, [self._st[n]] * m)
+    def signext(self, n: int):
+        return BitVec(self._sys, self._st + [self._st[-1]] * n)
+
+    def __getitem__(self, i: Union[int, slice]):
+        if isinstance(i, slice):
+            return BitVec(self._sys, self._st[i])
+        return BitVec(self._sys, [self._st[i]])
+
+    def dup(self, n: int):
+        return BitVec(self._sys, self._st * n)
+
+    def concat(self, other: "BitVec"):
+        self._check_sys(other)
+        return BitVec(self._sys, self._st + other._st)
 
 
 class LinearSystem:
@@ -102,7 +120,7 @@ class LinearSystem:
         self._vars = tuple(self._vars)
 
     def gens(self):
-        return self._vars
+        return tuple(x.__copy__() for x in self._vars)
 
     def get_sage_mat(self, zeros: list[BitVec], tqdm=lambda x, desc: x):
         """

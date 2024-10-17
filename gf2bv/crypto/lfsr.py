@@ -12,7 +12,7 @@ class GaloisLFSR:
         bit = self.state & 1
         self.state >>= 1
         sel = (
-            bit.copy(0, len(self.state)) & self.mask
+            bit[0].dup(len(self.state)) & self.mask
             if isinstance(bit, BitVec)
             else bit * self.mask
         )
