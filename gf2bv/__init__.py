@@ -4,32 +4,32 @@ from .pym4ri import solve
 
 class BitVec:
     def __init__(self, sys: "LinearSystem", st: list[int]):
-        self.sys = sys
-        self.st = st
+        self._sys = sys
+        self._st = st
 
     def _cast_int(self, n: int):
         if n < 0:
             raise ValueError("Negative value")
         st = []
-        for i in range(len(self.st)):
+        for i in range(len(self._st)):
             if n & 1:
                 st.append(1)
             else:
                 st.append(0)
             n >>= 1
-        return BitVec(self.sys, st)
+        return BitVec(self._sys, st)
 
     def _check_other(self, other: "BitVec"):
-        if self.sys is not other.sys:
+        if self._sys is not other._sys:
             raise ValueError("Cannot mix bitvecs from different systems")
-        if len(self.st) != len(other.st):
+        if len(self._st) != len(other._st):
             raise ValueError("Cannot mix bitvecs of different lengths")
 
     def __xor__(self, other: Union["BitVec", int]):
         if not isinstance(other, BitVec):
             return self ^ self._cast_int(other)
         self._check_other(other)
-        return BitVec(self.sys, [a ^ b for a, b in zip(self.st, other.st)])
+        return BitVec(self._sys, [a ^ b for a, b in zip(self._st, other._st)])
 
     __rxor__ = __xor__
 
@@ -38,34 +38,34 @@ class BitVec:
         return self ^ other
 
     def __rshift__(self, n: int):
-        return BitVec(self.sys, self.st[n:] + [0] * n)
+        return BitVec(self._sys, self._st[n:] + [0] * n)
 
     def __lshift__(self, n: int):
-        return BitVec(self.sys, [0] * n + self.st[:-n])
+        return BitVec(self._sys, [0] * n + self._st[:-n])
 
     def __and__(self, mask: int):
         if mask < 0:
             raise ValueError("Negative value")
-        vecs = self.st[:]
-        for i in range(len(self.st)):
+        vecs = self._st[:]
+        for i in range(len(self._st)):
             if mask & 1 == 0:
                 vecs[i] = 0
             mask >>= 1
-        return BitVec(self.sys, vecs)
+        return BitVec(self._sys, vecs)
 
     __rand__ = __and__
 
     def rotr(self, n: int):
-        return BitVec(self.sys, self.st[n:] + self.st[:n])
+        return BitVec(self._sys, self._st[n:] + self._st[:n])
 
     def rotl(self, n: int):
-        return BitVec(self.sys, self.st[-n:] + self.st[:-n])
+        return BitVec(self._sys, self._st[-n:] + self._st[:-n])
 
     def copy(self, n: int, m: int):
         """
         Construct a new bitvec by copying the n-th element m times
         """
-        return BitVec(self.sys, [self.st[n]] * m)
+        return BitVec(self._sys, [self._st[n]] * m)
 
 
 class LinearSystem:
@@ -116,7 +116,7 @@ class LinearSystem:
         # https://stackoverflow.com/questions/716477/join-list-of-lists-in-python/21034265#21034265
         # this seems to be the fastest way to flatten a list of lists
         eqs: list[int] = []
-        list(map(eqs.extend, (bv.st for bv in zeros)))
+        list(map(eqs.extend, (bv._st for bv in zeros)))
         eqs = list(filter(None, eqs))  # remove literal zeros
         return eqs
 
