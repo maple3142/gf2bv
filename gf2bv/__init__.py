@@ -115,12 +115,15 @@ Zeros = list[Union[BitVec, int]]
 class LinearSystem:
     def __init__(self, sizes: list[int]):
         self._sizes = sizes[:]
+        self._cols = sum(sizes)
         self._vars: list[BitVec] = []
+
+        # lsb used to represent constant term (affine part), the first one in the basis
+        self._basis = [1 << i for i in range(1 + self._cols)]
         i = 1  # lsb used to represent constant term (affine part)
         for size in self._sizes:
-            st = [1 << j for j in range(i, i + size)]
+            self._vars.append(BitVec(self, self._basis[i : i + size]))
             i += size
-            self._vars.append(BitVec(self, st))
         self._vars = tuple(self._vars)
 
     def gens(self):
@@ -140,7 +143,7 @@ class LinearSystem:
             affine.append(eqs[i] & 1)
             eqs[i] >>= 1
         affine = vector(F2, affine)
-        cols = sum(self._sizes)
+        cols = self._cols
         rows = len(eqs)
         mat = Matrix_mod2_dense(MatrixSpace(F2, rows, cols))
         i = 0
@@ -173,7 +176,7 @@ class LinearSystem:
         if 1 in eqs:
             # no solution
             return
-        cols = sum(self._sizes)
+        cols = self._cols
         if cols > len(eqs):
             # pym4ri.solve requires rows >= cols, pad with zeros
             eqs += [0] * (cols - len(eqs))
@@ -217,6 +220,7 @@ class QuadraticSystem(LinearSystem):
         return super().gens()[:-1]
 
     def mul_bit(self, a: int, b: int):
+        # TODO: find a way to optimize this
         n = self._lin_size
         const_lin_mask = (1 << (1 + n)) - 1
         # constant term and linear terms (x^2 = x in GF(2))
@@ -232,13 +236,12 @@ class QuadraticSystem(LinearSystem):
             a >>= 1
             b >>= 1
         # assert a == b == 0, "a, b is not linear terms"
-        qbv = super().gens()[-1]
-        mi = 0
+        mi = 1 + n
         for i in range(n):
             for j in range(i):
                 r = (abits[i] & bbits[j]) ^ (abits[j] & bbits[i])
                 if r:
-                    v |= qbv.bits[mi]  # same as (1 << (1 + n + mi))
+                    v |= self._basis[mi]  # same as (1 << mi)
                 mi += 1
         # assert (v >> (1 + self._lin_size + self._quad_size)) == 0, "Overflow"
         return v
@@ -268,7 +271,7 @@ class QuadraticSystem(LinearSystem):
         if self._check_lin_match_quad(lin, quad):
             return super().convert_sol(lin)[:-1]
 
-    def solve_one(self, zeros: list[BitVec | int]):
+    def solve_one(self, zeros: Zeros):
         # we can't use the LinearSystem.solve_one because the returned solution might not pass convert_sol
         for sol in self.solve_all(zeros):
             return sol
