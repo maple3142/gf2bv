@@ -119,7 +119,7 @@ static PyObject *solve(PyObject *self, PyObject *args) {
 		Py_ssize_t n_digits = PyLong_DigitCount(v);
 		Py_ssize_t c = -1;
 		for (Py_ssize_t i = 0; i < n_digits && c < cols; i++) {
-			digit d = v->long_value.ob_digit[i];
+			digit d = GET_OB_DIGITS(v)[i];
 			for (int j = 0; j < PyLong_SHIFT && c < cols; j++) {
 				if (c == -1) {
 					mzd_write_bit(B, r, 0, d & 1);
