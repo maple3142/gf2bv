@@ -9,7 +9,7 @@ module = Extension(
 
 setup(
     name="gf2bv",
-    version="0.1",
+    version="0.1.0",
     description="Solving linear systems over GF(2) by manipulating bitvectors",
     packages=["gf2bv", "gf2bv.crypto"],
     ext_modules=[module],
