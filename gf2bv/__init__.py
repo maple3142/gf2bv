@@ -120,7 +120,7 @@ class LinearSystem:
         eqs = list(filter(None, eqs))  # remove literal zeros
         return eqs
 
-    def solve_raw(self, zeros: list[BitVec]):
+    def solve_raw(self, zeros: list[BitVec], all: bool):
         eqs = self.get_eqs(zeros)
         if 1 in eqs:
             # no solution
@@ -129,20 +129,27 @@ class LinearSystem:
         if cols > len(eqs):
             # pym4ri.solve requires rows >= cols, pad with zeros
             eqs += [0] * (cols - len(eqs))
-        # may return None if no solution, otherwise return an iterator
-        return solve(eqs, cols, True)
+        # all mode: may return None if no solution, otherwise return an iterator
+        # one solution mode: return the solution directly if it exists, otherwise return None
+        return solve(eqs, cols, all)
 
     def convert_sol(self, s: int):
         sol = []
         for size in self._sizes:
             sol.append(s & ((1 << size) - 1))
             s >>= size
-        assert s == 0
+        assert s == 0, "Invalid solution"
         return tuple(sol)
 
-    def solve(self, zero_bvs: list[BitVec]):
-        it = self.solve_raw(zero_bvs)
+    def solve_all(self, zero_bvs: list[BitVec]):
+        it = self.solve_raw(zero_bvs, True)
         if it is None:
             return
         for s in it:
             yield self.convert_sol(s)
+
+    def solve_one(self, zero_bvs: list[BitVec]):
+        sol = self.solve_raw(zero_bvs, False)
+        if sol is None:
+            return
+        return self.convert_sol(sol)

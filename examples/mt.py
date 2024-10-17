@@ -16,7 +16,7 @@ def mt19937(bs):
     rng = MT19937(mt)
     zeros = [rng.getrandbits(bs) ^ o for o in out] + [mt[0] ^ 0x80000000]
     print("solving...")
-    for sol in lin.solve(zeros):
+    for sol in lin.solve_all(zeros):
         print("solved", sol[:10])
         assert sol == st
 
