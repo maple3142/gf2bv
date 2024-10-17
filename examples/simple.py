@@ -1,5 +1,6 @@
 import secrets
 from gf2bv import LinearSystem
+from gf2bv.pym4ri import solve
 
 
 def magic(x, y):
@@ -34,50 +35,6 @@ def simple_affine():
         print(f"{sol = }")
         assert magic(*sol) == (z1, z2, z3)
 
-def mt19937_32():
-    rand = random.Random(1234)
-    st = tuple(rand.getstate()[1][:-1])
-    out = [rand.getrandbits(32) for _ in range(624)]
-
-    lin = LinearSystem(**{f"mt_{i}": 32 for i in range(624)})
-    mt = lin.gens()
-
-    rng = MT19937(mt)
-    zeros = [rng.getrandbits(32) ^ o for o in out] + [mt[0] ^ 0x80000000]
-    print("solving...")
-    for sol in lin.solve(zeros):
-        print("solved", sol[:10])
-        assert sol == st
-        rng = MT19937(sol)
-        assert all(rng.getrandbits(32) == o for o in out)
-
-        rand2 = random.Random(1234)
-        rand2.setstate((3, tuple(list(sol) + [624]), None))
-        assert all(rand2.getrandbits(32) == o for o in out)
-
-
-def mt19937_1():
-    rand = random.Random(1234)
-    st = tuple(rand.getstate()[1][:-1])
-    out = [rand.getrandbits(1) for _ in range(624 * 32)]
-
-    lin = LinearSystem(**{f"mt_{i}": 32 for i in range(624)})
-    mt = lin.gens()
-
-    rng = MT19937(mt)
-    zeros = [rng.getrandbits(1) ^ o for o in out] + [mt[0] ^ 0x80000000]
-    print("solving...")
-    for sol in lin.solve(zeros):
-        # assert sol == st
-        rng = MT19937(sol)
-        assert all(rng.getrandbits(1) == o for o in out)
-
-        rand2 = random.Random(1234)
-        rand2.setstate((3, tuple(list(sol) + [624]), None))
-        assert all(rand2.getrandbits(1) == o for o in out)
-
 if __name__ == "__main__":
     simple_linear()
     simple_affine()
-# mt19937_32()
-# mt19937_1()

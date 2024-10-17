@@ -133,29 +133,38 @@ static PyObject *solve(PyObject *self, PyObject *args) {
 		}
 	}
 
-	mzd_t *A_copy = 0;  // for kernel, only needed if all solutions are needed
-	if (all) {
-		A_copy = mzd_copy(NULL, A);
-	}
-
+	// first, find the base solution
 	mzd_t *sol0;
-	if (B_is_not_zero) {
-		// this is actually solve_right in Sage...
-		if (mzd_solve_left(A, B, 0, 1) != 0) {
-			mzd_free(A);
-			mzd_free(B);
-			return Py_None;
+	{
+		// for kernel, only needed if all solutions are needed and B != 0
+		mzd_t *A_copy = 0;
+		if (B_is_not_zero) {
+			if (all) {
+				A_copy = mzd_copy(NULL, A);
+			}
+			// this is actually solve_right in Sage...
+			if (mzd_solve_left(A, B, 0, 1) != 0) {
+				mzd_free(A);
+				mzd_free(B);
+				if (all) {
+					mzd_free(A_copy);
+				}
+				return Py_None;
+			}
+			// the base solution is stored in B as column vector
+			sol0 = mzd_transpose(0, B);
+			mzd_free(A);  // A is overwritten by mzd_solve_left
+			A = A_copy;
+		} else {
+			// the trivial solution
+			sol0 = mzd_init(1, cols);
 		}
-		// the base solution, stored in B as column vector
-		sol0 = mzd_transpose(0, B);
-		mzd_free(A);
-		mzd_free(B);
-	} else {
-		mzd_free(A);
-		mzd_free(B);
-		sol0 = mzd_init(1, cols);  // the trivial solution
 	}
+	mzd_free(B);
+	// if all: A, sol0 is valid
+	// else: A is valid or 0, sol0 is valid
 
+	// if we only need one solution, return it
 	if (!all) {
 		char *str = malloc(cols + 1);
 		for (int c = 0; c < cols; c++) {
@@ -166,19 +175,27 @@ static PyObject *solve(PyObject *self, PyObject *args) {
 		PyObject *ret = PyLong_FromString(str, NULL, 2);
 		free(str);
 		mzd_free(sol0);
+		if (A) {
+			mzd_free(A);
+		}
 		return ret;
 	}
 
-	// and this is right_kernel_matrix
-	mzd_t *ker = mzd_kernel_left_pluq(A_copy, 0);
-	mzd_free(A_copy);
+	// if all solutions are needed, we need to find the kernel
+
 	mzd_t *tker;
-	if (ker == NULL) {
-		tker = mzd_init(0, 0);
-	} else {
-		tker = mzd_transpose(0, ker);
-		mzd_free(ker);
+	{
+		// and this is right_kernel_matrix
+		mzd_t *ker = mzd_kernel_left_pluq(A, 0);
+		mzd_free(A);
+		if (ker == NULL) {
+			tker = mzd_init(0, 0);
+		} else {
+			tker = mzd_transpose(0, ker);
+			mzd_free(ker);
+		}
 	}
+	// now, only sol0 and tker is valid
 
 	SolutionIterObject *it =
 	    PyObject_GC_New(SolutionIterObject, &SolutionIter_Type);
