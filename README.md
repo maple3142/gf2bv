@@ -4,6 +4,8 @@
 
 ## Installation
 
+First, you need to have `m4ri` installed on your system, try some package names like `mr4i`, `libm4ri-dev` or something else depending on [your system](https://repology.org/project/libm4ri/versions).
+
 Clone the repository and install the package with pip:
 
 ```bash
