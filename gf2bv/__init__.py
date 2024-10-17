@@ -1,5 +1,5 @@
 from typing import Union
-from .pym4ri import solve
+from .pym4ri import solve, to_bits
 
 
 class BitVec:
@@ -226,15 +226,17 @@ class QuadraticSystem(LinearSystem):
         # constant term and linear terms (x^2 = x in GF(2))
         v = (a & const_lin_mask) & b
         # quadratic terms
-        a >>= 1
-        b >>= 1
-        abits = [0] * n
-        bbits = [0] * n
-        for i in range(n):
-            abits[i] = a & 1
-            bbits[i] = b & 1
-            a >>= 1
-            b >>= 1
+        # a >>= 1
+        # b >>= 1
+        # abits = [0] * n
+        # bbits = [0] * n
+        # for i in range(n):
+        #     abits[i] = a & 1
+        #     bbits[i] = b & 1
+        #     a >>= 1
+        #     b >>= 1
+        abits = to_bits(n, a >> 1)
+        bbits = to_bits(n, b >> 1)
         # assert a == b == 0, "a, b is not linear terms"
         mi = 1 + n
         for i in range(n):

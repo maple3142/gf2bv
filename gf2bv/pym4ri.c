@@ -1,3 +1,4 @@
+#define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include <m4ri/m4ri.h>
 
@@ -213,9 +214,50 @@ static PyObject *solve(PyObject *self, PyObject *args) {
 	return (PyObject *)it;
 }
 
-static PyMethodDef methods[] = {{"solve", solve, METH_VARARGS,
-                                 "Solve a linear system over GF(2) with M4RI"},
-                                {NULL, NULL, 0, NULL}};
+#if PY_VERSION_HEX >= 0x030C0000
+// 3.12 and later they are immortal: https://peps.python.org/pep-0683/
+#define PythonTrue Py_True
+#define PythonFalse Py_False
+#else
+// pre 3.12
+#define PythonTrue Py_NewRef(Py_True)
+#define PythonFalse Py_NewRef(Py_False)
+#endif
+
+static PyObject *to_bits(PyObject *self, PyObject *args) {
+	// parse the arguments: (n: int, a: bigint)
+	// convert a bigint to a list of booleans of length n, little-endian
+	Py_ssize_t n;
+	PyObject *a;
+	if (!PyArg_ParseTuple(args, "nO!", &n, &PyLong_Type, &a))
+		return NULL;
+	if (n < 0) {
+		PyErr_SetString(PyExc_ValueError, "n must be non-negative");
+		return NULL;
+	}
+	PyObject *list = PyList_New(n);
+	PyLongObject *a_long = (PyLongObject *)a;
+	Py_ssize_t n_digits_a = PyLong_DigitCount(a_long);
+	Py_ssize_t c = 0;
+	for (Py_ssize_t i = 0; i < n_digits_a && c < n; i++) {
+		digit d = GET_OB_DIGITS(a_long)[i];
+		for (int j = 0; j < PyLong_SHIFT && c < n; j++) {
+			PyList_SetItem(list, c, d & 1 ? PythonTrue : PythonFalse);
+			d >>= 1;
+			c++;
+		}
+	}
+	for (; c < n; c++) {
+		PyList_SetItem(list, c, PythonFalse);
+	}
+	return list;
+}
+
+static PyMethodDef methods[] = {
+    {"solve", solve, METH_VARARGS,
+     "Solve a linear system over GF(2) with M4RI"},
+    {"to_bits", to_bits, METH_VARARGS, "Convert an integer to a list of bits"},
+    {NULL, NULL, 0, NULL}};
 
 static struct PyModuleDef pym4ri = {PyModuleDef_HEAD_INIT, "pym4ri", NULL, -1,
                                     methods};
