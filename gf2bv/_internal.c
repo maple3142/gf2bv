@@ -393,7 +393,19 @@ static struct PyModuleDef _internal = {PyModuleDef_HEAD_INIT, "_internal", NULL,
 			return NULL;             \
 	}
 
+#define ADD_TYPE(mod, type)                     \
+	{                                           \
+		if (PyModule_AddType(mod, &type) < 0) { \
+			Py_DECREF(mod);                     \
+			return NULL;                        \
+		}                                       \
+	}
+
 PyMODINIT_FUNC PyInit__internal(void) {
 	INIT_TYPE(SolutionIter_Type)
-	return PyModule_Create(&_internal);
+	PyObject *mod = PyModule_Create(&_internal);
+	if (mod == NULL)
+		return NULL;
+	ADD_TYPE(mod, SolutionIter_Type)
+	return mod;
 }
