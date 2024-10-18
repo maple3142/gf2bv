@@ -253,10 +253,75 @@ static PyObject *to_bits(PyObject *self, PyObject *args) {
 	return list;
 }
 
+void set_bits(char *bits, Py_ssize_t n, PyLongObject *o) {
+	Py_ssize_t n_digits_a = PyLong_DigitCount(o);
+	Py_ssize_t c = 0;
+	for (Py_ssize_t i = 0; i < n_digits_a && c < n; i++) {
+		digit d = GET_OB_DIGITS(o)[i];
+		for (int j = 0; j < PyLong_SHIFT && c < n; j++) {
+			bits[c] = d & 1 ? 1 : 0;
+			d >>= 1;
+			c++;
+		}
+	}
+	for (; c < n; c++) {
+		bits[c] = 0;
+	}
+}
+
+static PyObject *mul_bit_quad(PyObject *self, PyObject *args) {
+	Py_ssize_t n;
+	PyObject *a, *b, *v, *basis;
+	if (!PyArg_ParseTuple(args, "nO!O!O!O!", &n, &PyLong_Type, &a, &PyLong_Type,
+	                      &b, &PyLong_Type, &v, &PyList_Type, &basis))
+		return NULL;
+	if (n < 0) {
+		PyErr_SetString(PyExc_ValueError, "n must be non-negative");
+		return NULL;
+	}
+	Py_ssize_t len_basis = PyList_GET_SIZE(basis);
+	if (len_basis != n * (n - 1) / 2) {
+		PyErr_SetString(PyExc_ValueError,
+		                "The length of basis must be n * (n - 1) / 2");
+		return NULL;
+	}
+	char *a_bits = malloc(n);
+	set_bits(a_bits, n, (PyLongObject *)a);
+	char *b_bits = malloc(n);
+	set_bits(b_bits, n, (PyLongObject *)b);
+	int mi = 0;
+
+	Py_INCREF(v);  // invariant: v is a strong reference
+	for (int i = 0; i < n; i++) {
+		for (int j = 0; j < i; j++) {
+			int r = (a_bits[i] & b_bits[j]) ^ (a_bits[j] & b_bits[i]);
+			if (r) {
+				PyObject *ret = PyNumber_Or(v, PyList_GetItem(basis, mi));
+				if (ret == NULL) {
+					puts("bad");
+					free(a_bits);
+					free(b_bits);
+					PyErr_SetString(PyExc_TypeError,
+					                "Failed to compute or, list items "
+					                "must be integers");
+					return NULL;
+				}
+				Py_SETREF(v, ret);
+			}
+			mi++;
+		}
+	}
+	free(a_bits);
+	free(b_bits);
+	return v;
+}
+
 static PyMethodDef methods[] = {
     {"solve", solve, METH_VARARGS,
      "Solve a linear system over GF(2) with M4RI"},
     {"to_bits", to_bits, METH_VARARGS, "Convert an integer to a list of bits"},
+    {"mul_bit_quad", mul_bit_quad, METH_VARARGS,
+     "Multiply two integers using the quadratic formula"},
     {NULL, NULL, 0, NULL}};
 
 static struct PyModuleDef pym4ri = {PyModuleDef_HEAD_INIT, "pym4ri", NULL, -1,

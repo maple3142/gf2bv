@@ -1,5 +1,5 @@
 from typing import Union
-from .pym4ri import solve, to_bits
+from .pym4ri import solve, to_bits, mul_bit_quad
 
 
 class BitVec:
@@ -214,17 +214,18 @@ class QuadraticSystem(LinearSystem):
         quad_terms = n * (n - 1) // 2
         super().__init__(sizes + [quad_terms])
         self._lin_size = n
+        self._const_lin_mask = (1 << (1 + n)) - 1
         self._quad_size = quad_terms
+        self._qbasis = self._basis[-self._quad_size :]
 
     def gens(self):
         return super().gens()[:-1]
 
-    def mul_bit(self, a: int, b: int):
+    def mul_bit_slow(self, a: int, b: int):
         # TODO: find a way to optimize this
         n = self._lin_size
-        const_lin_mask = (1 << (1 + n)) - 1
         # constant term and linear terms (x^2 = x in GF(2))
-        v = (a & const_lin_mask) & b
+        v = (a & self._const_lin_mask) & b
         # quadratic terms
         # a >>= 1
         # b >>= 1
@@ -247,6 +248,12 @@ class QuadraticSystem(LinearSystem):
                 mi += 1
         # assert (v >> (1 + self._lin_size + self._quad_size)) == 0, "Overflow"
         return v
+
+    def mul_bit(self, a: int, b: int):
+        # constant term and linear terms (x^2 = x in GF(2))
+        v = (a & self._const_lin_mask) & b
+        # quadratic terms
+        return mul_bit_quad(self._lin_size, a >> 1, b >> 1, v, self._qbasis)
 
     def _check_lin_match_quad(self, lin: int, quad: int):
         n = self._lin_size
