@@ -147,7 +147,7 @@ class LinearSystem:
         eqs = list(filter(None, eqs))  # remove literal zeros
         return eqs
 
-    def solve_raw(self, zeros: Zeros, all: bool):
+    def solve_raw(self, zeros: Zeros, mode: int):
         eqs = self.get_eqs(zeros)
         if 1 in eqs:
             # no solution
@@ -158,7 +158,7 @@ class LinearSystem:
             eqs += [0] * (cols - len(eqs))
         # all mode: may return None if no solution, otherwise return an iterator
         # one solution mode: return the solution directly if it exists, otherwise return None
-        return m4ri_solve(eqs, cols, all)
+        return m4ri_solve(eqs, cols, mode)
 
     def convert_sol(self, s: int) -> Union[tuple[int], None]:
         sol = []
@@ -169,7 +169,7 @@ class LinearSystem:
         return tuple(sol)
 
     def solve_all(self, zeros: Zeros):
-        it = self.solve_raw(zeros, True)
+        it = self.solve_raw(zeros, 1)
         if it is None:
             return
         for s in it:
@@ -178,7 +178,7 @@ class LinearSystem:
                 yield ret
 
     def solve_one(self, zeros: Zeros):
-        sol = self.solve_raw(zeros, False)
+        sol = self.solve_raw(zeros, 0)
         if sol is None:
             return
         return self.convert_sol(sol)

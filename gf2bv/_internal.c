@@ -87,16 +87,16 @@ static PyTypeObject SolutionIter_Type = {
     .tp_iternext = (iternextfunc)solveiter_next,
 };
 
+#define SOLVE_MODE_SINGLE 0
+#define SOLVE_MODE_ALL 1
+#define SOLVE_MODE_AFFINE_SPACE 2
+
 static PyObject *m4ri_solve(PyObject *self,
                             PyObject *const *args,
                             Py_ssize_t nargs) {
 	PyObject *linsys_list;
 	Py_ssize_t cols;
-	int all = 0;
-	// parse the arguments: (list, cols, all)
-	// if (!PyArg_ParseTuple(args, "O!np", &PyList_Type, &linsys_list, &cols,
-	//                       &all))
-	// 	return NULL;
+	long mode = 0;
 	if (nargs != 3) {
 		PyErr_SetString(PyExc_TypeError, "m4ri_solve requires 3 arguments");
 		return NULL;
@@ -108,15 +108,23 @@ static PyObject *m4ri_solve(PyObject *self,
 		return NULL;
 	}
 	cols = PyLong_AsSsize_t(args[1]);
-	if (cols < 0) {
+	if (cols <= 0) {
 		if (cols == -1 && PyErr_Occurred()) {
 			return NULL;
 		}
-		PyErr_SetString(PyExc_ValueError,
-		                "Number of columns must be non-negative");
+		PyErr_SetString(PyExc_ValueError, "Number of columns must be positive");
 		return NULL;
 	}
-	all = PyObject_IsTrue(args[2]);
+	mode = PyLong_AsLong(args[2]);
+	if (mode == -1 && PyErr_Occurred()) {
+		return NULL;
+	}
+	if (mode != SOLVE_MODE_SINGLE && mode != SOLVE_MODE_ALL &&
+	    mode != SOLVE_MODE_AFFINE_SPACE) {
+		PyErr_SetString(PyExc_ValueError, "Invalid mode");
+		return NULL;
+	}
+	int need_kernel = mode == SOLVE_MODE_ALL || mode == SOLVE_MODE_AFFINE_SPACE;
 	Py_ssize_t rows = PyList_Size(linsys_list);
 	if (rows < cols) {
 		PyErr_SetString(PyExc_ValueError,
@@ -164,10 +172,9 @@ static PyObject *m4ri_solve(PyObject *self,
 	// first, find the base solution
 	mzd_t *sol0;
 	{
-		// for kernel, only needed if all solutions are needed and B != 0
 		mzd_t *A_copy = 0;
 		if (B_is_not_zero) {
-			if (all) {
+			if (need_kernel) {
 				A_copy = mzd_copy(NULL, A);
 			}
 			// printf("A->nrows: %d, A->ncols: %d\n", A->nrows, A->ncols);
@@ -176,7 +183,7 @@ static PyObject *m4ri_solve(PyObject *self,
 			if (mzd_solve_left(A, B, 0, 1) != 0) {
 				mzd_free(A);
 				mzd_free(B);
-				if (all) {
+				if (need_kernel) {
 					mzd_free(A_copy);
 				}
 				return Py_None;
@@ -192,11 +199,11 @@ static PyObject *m4ri_solve(PyObject *self,
 		}
 	}
 	mzd_free(B);
-	// if all: A, sol0 is valid
+	// if need_kernel: A, sol0 is valid
 	// else: A is valid or 0, sol0 is valid
 
 	// if we only need one solution, return it
-	if (!all) {
+	if (mode == SOLVE_MODE_SINGLE) {
 		char *str = malloc(cols + 1);
 		str[cols] = '\0';
 		PyObject *ret = mzd_vector_to_pylong(str, sol0);
@@ -208,8 +215,7 @@ static PyObject *m4ri_solve(PyObject *self,
 		return ret;
 	}
 
-	// if all solutions are needed, we need to find the kernel
-
+	// compute the kernel
 	mzd_t *tker;
 	{
 		// and this is right_kernel_matrix
@@ -224,16 +230,37 @@ static PyObject *m4ri_solve(PyObject *self,
 	}
 	// now, only sol0 and tker is valid
 
-	SolutionIterObject *it =
-	    PyObject_GC_New(SolutionIterObject, &SolutionIter_Type);
-	it->sol0 = sol0;
-	it->kernel = tker;
-	it->state = malloc(tker->nrows + 1);
-	it->str = malloc(cols + 1);
-	it->str[cols] = '\0';
-	memset(it->state, 0, tker->nrows + 1);
+	if (mode == SOLVE_MODE_ALL) {
+		SolutionIterObject *it =
+		    PyObject_GC_New(SolutionIterObject, &SolutionIter_Type);
+		it->sol0 = sol0;
+		it->kernel = tker;
+		it->state = malloc(tker->nrows + 1);
+		it->str = malloc(cols + 1);
+		it->str[cols] = '\0';
+		memset(it->state, 0, tker->nrows + 1);
 
-	return (PyObject *)it;
+		return (PyObject *)it;
+	} else {
+		// mode == SOLVE_MODE_AFFINE_SPACE
+		// we return a tuple (sol0, [k0, k1, ...])
+		PyObject *list = PyList_New(tker->nrows);
+		char *str = malloc(cols + 1);
+		str[cols] = '\0';
+		PyObject *sol0_pylong = mzd_vector_to_pylong(str, sol0);
+		for (rci_t r = 0; r < tker->nrows; r++) {
+			mzd_t *w = mzd_init_window(tker, r, 0, r + 1, tker->ncols);
+			PyList_SetItem(list, r, mzd_vector_to_pylong(str, w));
+			mzd_free_window(w);
+		}
+		free(str);
+		mzd_free(sol0);
+		mzd_free(tker);
+		PyObject *ret = PyTuple_Pack(2, sol0_pylong, list);
+		Py_DECREF(sol0_pylong);
+		Py_DECREF(list);
+		return ret;
+	}
 }
 
 #if PY_VERSION_HEX >= 0x030C0000
@@ -376,7 +403,7 @@ static PyObject *mul_bit_quad(PyObject *self,
 
 static PyMethodDef methods[] = {
     {"m4ri_solve", _PyCFunction_CAST(m4ri_solve), METH_FASTCALL,
-     "m4ri_solve(equations, cols, all)\n"
+     "m4ri_solve(equations, cols, mode)\n"
      "--\n"
      "\n"
      "Solve a linear system over GF(2) with M4RI"},
