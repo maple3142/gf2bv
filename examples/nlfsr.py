@@ -51,7 +51,7 @@ def nlfsr_test(LFSR):
             # this is same as the annihilator function
             z = qsys.mul_bit(x0, x1) ^ x0 ^ qsys.mul_bit(x1, x2) ^ x1 ^ x2 ^ 1
             zeros.append(z)
-    print(len(zeros))
+    print(f"{len(zeros) = }")
     sols = list(qsys.solve_all(zeros))
     for (sol,) in sols:
         print(f"{sol = :0{n}b}")

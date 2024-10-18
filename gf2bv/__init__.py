@@ -1,7 +1,7 @@
 from typing import Union
 from operator import xor
 from functools import reduce
-from ._internal import m4ri_solve, to_bits, mul_bit_quad
+from ._internal import m4ri_solve, to_bits, mul_bit_quad, AffineSpace
 
 
 class BitVec:
@@ -86,6 +86,12 @@ class BitVec:
 
 
 Zeros = list[Union[BitVec, int]]
+
+
+class DimensionTooLargeError(Exception):
+    def __init__(self, message: str, space: AffineSpace):
+        super().__init__(message)
+        self.space = space
 
 
 class LinearSystem:
@@ -173,8 +179,9 @@ class LinearSystem:
         if space is None:
             return
         if space.dimension > max_dimension:
-            raise ValueError(
-                f"Solution space (dim {space.dimension}) is too large, try increase max_dimension ({max_dimension}) if you want (there will be 2**dim solutions)"
+            raise DimensionTooLargeError(
+                f"Solution space (dim {space.dimension}) is too large, try increase max_dimension ({max_dimension}) if you want (there will be 2**dim solutions)",
+                space=space,
             )
         for s in space:
             ret = self.convert_sol(s)
@@ -228,11 +235,32 @@ class QuadraticSystem(LinearSystem):
         # assert (v >> (1 + self._lin_size + self._quad_size)) == 0, "Overflow"
         return v
 
-    def mul_bit(self, a: int, b: int):
+    def mul_bit(self, a: int, b: int) -> int:
         # constant term and linear terms (x^2 = x in GF(2))
         v = (a & self._const_lin_mask) & b
         # quadratic terms
         return mul_bit_quad(self._lin_size, a >> 1, b >> 1, v, self._basis)
+
+    def bit_assert(self, a: int, v: int):
+        # this is to assert `a` bit is exactly equal to `v`
+        assert v in (0, 1), "Invalid bit"
+        assert a not in (0, 1), "a should not be a constant"
+        assert a >> self._lin_size == 0, "Not a linear term"
+        assert a.bit_count() == 1, "Not a simple linear term"
+        zeros = [a ^ v]  # assert simple linear term
+        # and it a linearized system, we can see that:
+        # bits[x] * bits[?] = 0 if v == bits[x] == 0
+        # bits[x] * bits[?] = bits[?] if v == bits[x] == 1
+        # and `a` represents bits[x], `b` represents bits[?]
+        for i in range(1, 1 + self._lin_size):
+            b = self._basis[i]  # linear term
+            if a == b:
+                continue
+            if v == 0:
+                zeros.append(self.mul_bit(a, b))
+            else:
+                zeros.append(self.mul_bit(a, b) ^ b)
+        return zeros
 
     def _check_lin_match_quad(self, lin: int, quad: int):
         n = self._lin_size
