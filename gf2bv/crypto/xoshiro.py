@@ -21,14 +21,14 @@ class Xoshiro256starstar:
         return Xoshiro256starstar([secrets.randbits(64) for _ in range(4)])
 
     @staticmethod
-    def tamper(s1):
+    def temper(s1):
         return rotl64(s1 * 5 & MASK64, 7) * 9 & MASK64
 
     inv9 = pow(9, -1, 1 << 64)
     inv5 = pow(5, -1, 1 << 64)
 
     @staticmethod
-    def untamper(s1):
+    def untemper(s1):
         return (
             rotl64(s1 * Xoshiro256starstar.inv9 & MASK64, 64 - 7)
             * Xoshiro256starstar.inv5
@@ -49,4 +49,4 @@ class Xoshiro256starstar:
         return result
 
     def __call__(self):
-        return self.tamper(self.step())
+        return self.temper(self.step())

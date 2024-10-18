@@ -10,7 +10,7 @@ def xoshiro256starstar():
 
     lin = LinearSystem([64] * 4)
     xos2 = Xoshiro256starstar(lin.gens())
-    zeros = [xos2.step() ^ Xoshiro256starstar.untamper(o) for o in out]
+    zeros = [xos2.step() ^ Xoshiro256starstar.untemper(o) for o in out]
     for sol in lin.solve_all(zeros):
         print(f"{sol = }")
         xos2 = Xoshiro256starstar(sol)
