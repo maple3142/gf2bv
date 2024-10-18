@@ -169,10 +169,10 @@ class LinearSystem:
         return tuple(sol)
 
     def solve_all(self, zeros: Zeros):
-        it = self.solve_raw(zeros, 1)
-        if it is None:
+        space = self.solve_raw(zeros, 1)
+        if space is None:
             return
-        for s in it:
+        for s in space:
             ret = self.convert_sol(s)
             if ret is not None:
                 yield ret

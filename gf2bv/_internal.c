@@ -24,29 +24,40 @@ static PyObject *mzd_vector_to_pylong(char *buf, mzd_t *v) {
 	return PyLong_FromString(buf, NULL, 2);
 }
 
-// iterator reference: https://github.com/Lydxn/xorsat/blob/789fed013292f060c026be8d1990631041969e40/xorsat/_xorsatmodule.c#L1377
 typedef struct {
 	PyObject_HEAD mzd_t *sol0;
 	mzd_t *kernel;
+} AffineSpaceObject;
+
+typedef struct {
+	PyObject_HEAD AffineSpaceObject *space;
 	uint8_t *state;
 	char *str;
-} SolutionIterObject;
+} AffineSpaceIterableObject;
 
-static PyObject *solveiter_next(SolutionIterObject *it) {
+static void affinespace_dealloc(AffineSpaceObject *self) {
+	PyObject_GC_UnTrack(self);
+	mzd_free(self->sol0);
+	mzd_free(self->kernel);
+	PyObject_GC_Del(self);
+}
+
+static PyObject *affinespaceiterable_next(AffineSpaceIterableObject *it) {
 	// TODO: use gray code for more efficient enumeration
 
 	mzd_t *result;
 	rci_t n, r;
 	int sentinel;
+	AffineSpaceObject *space = it->space;
 
-	n = it->kernel->nrows;
+	n = space->kernel->nrows;
 	if (it->state[n])
 		return NULL; /* StopIteration */
 
-	result = mzd_copy(NULL, it->sol0);
+	result = mzd_copy(NULL, space->sol0);
 	for (r = 0; r < n; r++)
 		if (it->state[r])
-			mzd_combine_even_in_place(result, 0, 0, it->kernel, r, 0);
+			mzd_combine_even_in_place(result, 0, 0, space->kernel, r, 0);
 
 	sentinel = 1;
 	for (r = 0; r < n; r++) {
@@ -62,29 +73,66 @@ static PyObject *solveiter_next(SolutionIterObject *it) {
 	return ret;
 }
 
-static void solveiter_dealloc(SolutionIterObject *self) {
+static void affinespaceiterable_dealloc(AffineSpaceIterableObject *self) {
 	PyObject_GC_UnTrack(self);
-	mzd_free(self->sol0);
-	mzd_free(self->kernel);
+	Py_DECREF(self->space);
 	free(self->state);
 	free(self->str);
 	PyObject_GC_Del(self);
 }
 
+static int affinespaceiterable_traverse(AffineSpaceIterableObject *self,
+                              visitproc visit,
+                              void *arg) {
+	Py_VISIT(self->space);
+	return 0;
+}
+
+static int affinespaceiterable_clear(AffineSpaceIterableObject *self) {
+	Py_CLEAR(self->space);
+	return 0;
+}
+
+static PyTypeObject AffineSpaceIterable_Type = {
+    .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name =
+        "_internal.AffineSpaceIterable",
+    .tp_basicsize = sizeof(AffineSpaceIterableObject),
+    .tp_itemsize = 0,
+    .tp_dealloc = (destructor)affinespaceiterable_dealloc,
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
+    .tp_traverse = (traverseproc)affinespaceiterable_traverse,
+    .tp_clear = (inquiry)affinespaceiterable_clear,
+    .tp_doc = NULL,
+    .tp_iter = PyObject_SelfIter,
+    .tp_iternext = (iternextfunc)affinespaceiterable_next,
+};
+
+static PyObject *affinespace_iter(PyObject *self) {
+	// create an iterator object
+	AffineSpaceIterableObject *it =
+	    PyObject_GC_New(AffineSpaceIterableObject, &AffineSpaceIterable_Type);
+	it->space = (AffineSpaceObject *)self;
+	it->state = malloc(it->space->kernel->nrows + 1);
+	it->str = malloc(it->space->sol0->ncols + 1);
+	it->str[it->space->sol0->ncols] = '\0';
+	memset(it->state, 0, it->space->kernel->nrows + 1);
+	Py_INCREF(self);
+	PyObject_GC_Track(it);
+	return (PyObject *)it;
+}
+
 static void nop() {}
 
-static PyTypeObject SolutionIter_Type = {
-    .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name =
-        "_internal.SolutionIter",
-    .tp_basicsize = sizeof(SolutionIterObject),
+static PyTypeObject AffineSpace_Type = {
+    .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name = "_internal.AffineSpace",
+    .tp_basicsize = sizeof(AffineSpaceObject),
     .tp_itemsize = 0,
-    .tp_dealloc = (destructor)solveiter_dealloc,
+    .tp_dealloc = (destructor)affinespace_dealloc,
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
     .tp_traverse = (traverseproc)nop,
     .tp_clear = (inquiry)nop,
     .tp_doc = NULL,
-    .tp_iter = PyObject_SelfIter,
-    .tp_iternext = (iternextfunc)solveiter_next,
+    .tp_iter = affinespace_iter,
 };
 
 #define SOLVE_MODE_SINGLE 0
@@ -231,15 +279,20 @@ static PyObject *m4ri_solve(PyObject *self,
 	// now, only sol0 and tker is valid
 
 	if (mode == SOLVE_MODE_ALL) {
-		SolutionIterObject *it =
-		    PyObject_GC_New(SolutionIterObject, &SolutionIter_Type);
+		// AffineSpaceIterableObject *it =
+		//     PyObject_GC_New(AffineSpaceIterableObject, &AffineSpaceIterable_Type);
+		// it->sol0 = sol0;
+		// it->kernel = tker;
+		// it->state = malloc(tker->nrows + 1);
+		// it->str = malloc(cols + 1);
+		// it->str[cols] = '\0';
+		// memset(it->state, 0, tker->nrows + 1);
+
+		AffineSpaceObject *it =
+		    PyObject_GC_New(AffineSpaceObject, &AffineSpace_Type);
 		it->sol0 = sol0;
 		it->kernel = tker;
-		it->state = malloc(tker->nrows + 1);
-		it->str = malloc(cols + 1);
-		it->str[cols] = '\0';
-		memset(it->state, 0, tker->nrows + 1);
-
+		PyObject_GC_Track(it);
 		return (PyObject *)it;
 	} else {
 		// mode == SOLVE_MODE_AFFINE_SPACE
@@ -438,10 +491,12 @@ static struct PyModuleDef _internal = {PyModuleDef_HEAD_INIT, "_internal", NULL,
 	}
 
 PyMODINIT_FUNC PyInit__internal(void) {
-	INIT_TYPE(SolutionIter_Type)
+	INIT_TYPE(AffineSpace_Type)
+	INIT_TYPE(AffineSpaceIterable_Type)
 	PyObject *mod = PyModule_Create(&_internal);
 	if (mod == NULL)
 		return NULL;
-	ADD_TYPE(mod, SolutionIter_Type)
+	ADD_TYPE(mod, AffineSpace_Type)
+	ADD_TYPE(mod, AffineSpaceIterable_Type)
 	return mod;
 }
