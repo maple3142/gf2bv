@@ -1,6 +1,4 @@
-#define PY_SSIZE_T_CLEAN
-#include <Python.h>
-#include <m4ri/m4ri.h>
+#include "_inernal.h"
 
 // CPython does not have an public API for this yet
 // ref: https://github.com/aleaxit/gmpy/issues/467
@@ -15,7 +13,19 @@
 #define GET_OB_DIGITS(o) ((o)->ob_digit)
 #endif
 
-static PyObject *mzd_vector_to_pylong(char *buf, mzd_t *v) {
+#if PY_VERSION_HEX >= 0x030C0000
+// 3.12 and later they are immortal: https://peps.python.org/pep-0683/
+#define PythonTrue Py_True
+#define PythonFalse Py_False
+#else
+// pre 3.12
+#define PythonTrue Py_NewRef(Py_True)
+#define PythonFalse Py_NewRef(Py_False)
+#endif
+
+static void nop() {}
+
+static inline PyObject *mzd_vector_to_pylong(char *buf, mzd_t *v) {
 	rci_t len = v->ncols;
 	// buf[len] must be 0
 	for (int c = 0; c < len; c++) {
@@ -24,25 +34,9 @@ static PyObject *mzd_vector_to_pylong(char *buf, mzd_t *v) {
 	return PyLong_FromString(buf, NULL, 2);
 }
 
-typedef struct {
-	PyObject_HEAD mzd_t *origin;
-	mzd_t *basis;
-} AffineSpaceObject;
+#pragma region AffineSpaceIterable
 
-typedef struct {
-	PyObject_HEAD AffineSpaceObject *space;
-	uint8_t *state;
-	char *str;
-} AffineSpaceIterableObject;
-
-static void affinespace_dealloc(AffineSpaceObject *self) {
-	PyObject_GC_UnTrack(self);
-	mzd_free(self->origin);
-	mzd_free(self->basis);
-	PyObject_GC_Del(self);
-}
-
-static PyObject *affinespaceiterable_next(AffineSpaceIterableObject *self) {
+PyObject *affinespaceiterable_next(AffineSpaceIterableObject *self) {
 	// TODO: use gray code for more efficient enumeration
 
 	mzd_t *result;
@@ -106,6 +100,10 @@ static PyTypeObject AffineSpaceIterable_Type = {
     .tp_iter = PyObject_SelfIter,
     .tp_iternext = (iternextfunc)affinespaceiterable_next,
 };
+
+#pragma endregion
+
+#pragma region AffineSpace
 
 static PyObject *affinespace_iter(PyObject *self) {
 	// create an iterator object
@@ -204,7 +202,12 @@ static PyMethodDef AffineSpace_methods[] = {
     {NULL} /* Sentinel */
 };
 
-static void nop() {}
+static void affinespace_dealloc(AffineSpaceObject *self) {
+	PyObject_GC_UnTrack(self);
+	mzd_free(self->origin);
+	mzd_free(self->basis);
+	PyObject_GC_Del(self);
+}
 
 static PyTypeObject AffineSpace_Type = {
     .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name = "_internal.AffineSpace",
@@ -220,12 +223,9 @@ static PyTypeObject AffineSpace_Type = {
     .tp_getset = AffineSpace_getsetters,
 };
 
-#define SOLVE_MODE_SINGLE 0
-#define SOLVE_MODE_ALL 1
+#pragma endregion
 
-static PyObject *m4ri_solve(PyObject *self,
-                            PyObject *const *args,
-                            Py_ssize_t nargs) {
+PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 	PyObject *linsys_list;
 	Py_ssize_t cols;
 	long mode = 0;
@@ -369,25 +369,9 @@ static PyObject *m4ri_solve(PyObject *self,
 	return (PyObject *)it;
 }
 
-#if PY_VERSION_HEX >= 0x030C0000
-// 3.12 and later they are immortal: https://peps.python.org/pep-0683/
-#define PythonTrue Py_True
-#define PythonFalse Py_False
-#else
-// pre 3.12
-#define PythonTrue Py_NewRef(Py_True)
-#define PythonFalse Py_NewRef(Py_False)
-#endif
-
-static PyObject *to_bits(PyObject *self,
-                         PyObject *const *args,
-                         Py_ssize_t nargs) {
-	// parse the arguments: (n: int, a: bigint)
-	// convert a bigint to a list of booleans of length n, little-endian
+PyObject *to_bits(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 	Py_ssize_t n;
 	PyObject *a;
-	// if (!PyArg_ParseTuple(args, "nO!", &n, &PyLong_Type, &a))
-	// 	return NULL;
 	if (nargs != 2) {
 		PyErr_SetString(PyExc_TypeError, "to_bits requires 2 arguments");
 		return NULL;
@@ -423,7 +407,7 @@ static PyObject *to_bits(PyObject *self,
 	return list;
 }
 
-void set_bits(char *bits, Py_ssize_t n, PyLongObject *o) {
+static void set_bits(char *bits, Py_ssize_t n, PyLongObject *o) {
 	Py_ssize_t n_digits_a = PyLong_DigitCount(o);
 	Py_ssize_t c = 0;
 	for (Py_ssize_t i = 0; i < n_digits_a && c < n; i++) {
@@ -439,9 +423,9 @@ void set_bits(char *bits, Py_ssize_t n, PyLongObject *o) {
 	}
 }
 
-static PyObject *mul_bit_quad(PyObject *self,
-                              PyObject *const *args,
-                              Py_ssize_t nargs) {
+PyObject *mul_bit_quad(PyObject *self,
+                       PyObject *const *args,
+                       Py_ssize_t nargs) {
 	Py_ssize_t n;
 	PyObject *a, *b, *v, *basis;
 	// if (!PyArg_ParseTuple(args, "nO!O!O!O!", &n, &PyLong_Type, &a, &PyLong_Type,
@@ -517,7 +501,7 @@ static PyMethodDef methods[] = {
      "to_bits(n, number)\n"
      "--\n"
      "\n"
-     "Convert an integer to a list of bits"},
+     "Convert an integer to a list of bits (bool values)"},
     {"mul_bit_quad", _PyCFunction_CAST(mul_bit_quad), METH_FASTCALL,
      "mul_bit_quad(n, a, b, v, basis)\n"
      "--\n"
