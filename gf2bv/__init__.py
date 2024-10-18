@@ -1,4 +1,6 @@
 from typing import Union
+from operator import xor
+from functools import reduce
 from .pym4ri import solve, to_bits, mul_bit_quad
 
 
@@ -28,17 +30,14 @@ class BitVec:
     def __xor__(self, other: Union["BitVec", int]):
         if not isinstance(other, BitVec):
             bs = to_bits(len(self.bits), other)
-            return BitVec(self.sys, [a ^ b for a, b in zip(self.bits, bs)])
+            return BitVec(self.sys, list(map(xor, self.bits, bs)))
         else:
             self._check_sys(other)
             self._check_len(other)
-        return BitVec(self.sys, [a ^ b for a, b in zip(self.bits, other.bits)])
+        return BitVec(self.sys, list(map(xor, self.bits, other.bits)))
 
     __rxor__ = __xor__
-
-    def __pow__(self, other: Union["BitVec", int]):
-        # Alias to __xor__, for convenience in sage
-        return self ^ other
+    __pow__ = __xor__  # alias to __xor__, for convenience in sage
 
     def __rshift__(self, n: int):
         return BitVec(self.sys, self.bits[n:] + [0] * n)
@@ -47,26 +46,14 @@ class BitVec:
         return BitVec(self.sys, [0] * n + self.bits[:-n])
 
     def __and__(self, mask: int):
-        if mask < 0:
-            raise ValueError("Negative value")
-        vecs = self.bits[:]
-        for i in range(len(self.bits)):
-            if mask & 1 == 0:
-                vecs[i] = 0
-            mask >>= 1
-        return BitVec(self.sys, vecs)
+        bs = to_bits(len(self.bits), mask)
+        return BitVec(self.sys, [0 if not b else a for a, b in zip(self.bits, bs)])
 
     __rand__ = __and__
 
     def __or__(self, mask: int):
-        if mask < 0:
-            raise ValueError("Negative value")
-        vecs = self.bits[:]
-        for i in range(len(self.bits)):
-            if mask & 1:
-                vecs[i] = 1
-            mask >>= 1
-        return BitVec(self.sys, vecs)
+        bs = to_bits(len(self.bits), mask)
+        return BitVec(self.sys, [1 if b else a for a, b in zip(self.bits, bs)])
 
     __ror__ = __or__
 
@@ -77,10 +64,7 @@ class BitVec:
         return BitVec(self.sys, self.bits[-n:] + self.bits[:-n])
 
     def sum(self):
-        t = 0
-        for x in self.bits:
-            t ^= x
-        return BitVec(self.sys, [t])
+        return BitVec(self.sys, [reduce(xor, self.bits)])
 
     def zeroext(self, n: int):
         return BitVec(self.sys, self.bits + [0] * n)
