@@ -2,7 +2,7 @@ from gf2bv import QuadraticSystem, DimensionTooLargeError
 from gf2bv.crypto.lfsr import GaloisLFSR, FibonacciLFSR
 from tqdm import trange
 from pathlib import Path
-import secrets, pickle, traceback, itertools
+import secrets, pickle, traceback, itertools, gzip
 
 from nlfsr import n, mask, select, non_linear_output
 
@@ -17,9 +17,9 @@ def nlfsr_ex_test(LFSR):
 
     # note that for a given LFSR, its system is the same
     # so we can precompute the system and reuse it
-    cache_file_name = Path(__file__).parent / f"cache_{LFSR.__name__}.pkl"
+    cache_file_name = Path(__file__).parent / f"cache_{LFSR.__name__}.pkl.gz"
     try:
-        with open(cache_file_name, "rb") as f:
+        with gzip.open(cache_file_name, "rb") as f:
             maybe_zeros = pickle.load(f)
         assert len(maybe_zeros) == N
         print("cache found, reusing...")
@@ -34,7 +34,7 @@ def nlfsr_ex_test(LFSR):
             z = qsys.mul_bit(x0, x1) ^ x0 ^ qsys.mul_bit(x1, x2) ^ x1 ^ x2 ^ 1
             # maybe_zeros is like zeros, it is also the real zeros if the output is 1
             maybe_zeros.append(z)
-        with open(cache_file_name, "wb") as f:
+        with gzip.open(cache_file_name, "wb") as f:
             # yes, it can be trivially serialized using pickle
             pickle.dump(maybe_zeros, f)
             # dumping the system is also supported, but you don't need to do that
@@ -77,4 +77,4 @@ def nlfsr_ex_test(LFSR):
 
 if __name__ == "__main__":
     nlfsr_ex_test(GaloisLFSR)
-    # nlfsr_ex_test(FibonacciLFSR)
+    nlfsr_ex_test(FibonacciLFSR)
