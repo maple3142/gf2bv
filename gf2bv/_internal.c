@@ -34,6 +34,26 @@ static inline PyObject *mzd_vector_to_pylong(char *buf, mzd_t *v) {
 	return PyLong_FromString(buf, NULL, 2);
 }
 
+#define Iter_PyLong_Bits(obj, max, action, after_action)                      \
+	do {                                                                      \
+		Py_ssize_t _n_digits = PyLong_DigitCount(obj);                        \
+		Py_ssize_t bitcnt = 0;                                                \
+		for (Py_ssize_t _digits_i = 0; _digits_i < _n_digits && bitcnt < max; \
+		     _digits_i++) {                                                   \
+			digit _digit = GET_OB_DIGITS(obj)[_digits_i];                     \
+			for (int _digit_j = 0; _digit_j < PyLong_SHIFT && bitcnt < max;   \
+			     _digit_j++) {                                                \
+				int bit = _digit & 1;                                         \
+				action;                                                       \
+				_digit >>= 1;                                                 \
+				bitcnt++;                                                     \
+			}                                                                 \
+		}                                                                     \
+		for (; bitcnt < max; bitcnt++) {                                      \
+			after_action;                                                     \
+		}                                                                     \
+	} while (0)
+
 #pragma region AffineSpaceIterable
 
 PyObject *affinespaceiterable_next(AffineSpaceIterableObject *self) {
@@ -171,18 +191,14 @@ static PyObject *affinespace_get(AffineSpaceObject *self,
 	rci_t nr = self->basis->nrows;
 
 	PyLongObject *n = (PyLongObject *)index;
-	Py_ssize_t n_digits = PyLong_DigitCount(n);
-	Py_ssize_t c = 0;
-	for (Py_ssize_t i = 0; i < n_digits && c < nr; i++) {
-		digit d = GET_OB_DIGITS(n)[i];
-		for (int j = 0; j < PyLong_SHIFT && c < nr; j++) {
-			if (d & 1) {
-				mzd_combine_even_in_place(result, 0, 0, self->basis, c, 0);
-			}
-			d >>= 1;
-			c++;
-		}
-	}
+	Iter_PyLong_Bits(n, nr,
+	                 {
+		                 if (bit) {
+			                 mzd_combine_even_in_place(result, 0, 0,
+			                                           self->basis, bitcnt, 0);
+		                 }
+	                 },
+	                 {});
 
 	char *str = malloc(result->ncols + 1);
 	str[result->ncols] = '\0';
@@ -283,21 +299,16 @@ PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 		// row in A: [v_1 v_2 ... v_cols]
 		// row in B: [v_0]
 		PyLongObject *v = (PyLongObject *)item;
-		Py_ssize_t n_digits = PyLong_DigitCount(v);
-		Py_ssize_t c = -1;
-		for (Py_ssize_t i = 0; i < n_digits && c < cols; i++) {
-			digit d = GET_OB_DIGITS(v)[i];
-			for (int j = 0; j < PyLong_SHIFT && c < cols; j++) {
-				if (c == -1) {
-					mzd_write_bit(B, r, 0, d & 1);
-					B_is_not_zero |= d & 1;
-				} else {
-					mzd_write_bit(A, r, c, d & 1);
-				}
-				d >>= 1;
-				c++;
-			}
-		}
+		Iter_PyLong_Bits(v, cols + 1,
+		                 {
+			                 if (bitcnt == 0) {
+				                 mzd_write_bit(B, r, 0, bit);
+				                 B_is_not_zero |= bit;
+			                 } else {
+				                 mzd_write_bit(A, r, bitcnt - 1, bit);
+			                 }
+		                 },
+		                 {});
 	}
 
 	// first, find the base solution
@@ -391,36 +402,16 @@ PyObject *to_bits(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 	}
 	PyObject *list = PyList_New(n);
 	PyLongObject *a_long = (PyLongObject *)a;
-	Py_ssize_t n_digits_a = PyLong_DigitCount(a_long);
-	Py_ssize_t c = 0;
-	for (Py_ssize_t i = 0; i < n_digits_a && c < n; i++) {
-		digit d = GET_OB_DIGITS(a_long)[i];
-		for (int j = 0; j < PyLong_SHIFT && c < n; j++) {
-			PyList_SetItem(list, c, d & 1 ? PythonTrue : PythonFalse);
-			d >>= 1;
-			c++;
-		}
-	}
-	for (; c < n; c++) {
-		PyList_SetItem(list, c, PythonFalse);
-	}
+	Iter_PyLong_Bits(
+	    a_long, n,
+	    { PyList_SetItem(list, bitcnt, bit ? PythonTrue : PythonFalse); },
+	    { PyList_SetItem(list, bitcnt, PythonFalse); });
 	return list;
 }
 
 static void set_bits(char *bits, Py_ssize_t n, PyLongObject *o) {
-	Py_ssize_t n_digits_a = PyLong_DigitCount(o);
-	Py_ssize_t c = 0;
-	for (Py_ssize_t i = 0; i < n_digits_a && c < n; i++) {
-		digit d = GET_OB_DIGITS(o)[i];
-		for (int j = 0; j < PyLong_SHIFT && c < n; j++) {
-			bits[c] = d & 1 ? 1 : 0;
-			d >>= 1;
-			c++;
-		}
-	}
-	for (; c < n; c++) {
-		bits[c] = 0;
-	}
+	Iter_PyLong_Bits(
+	    o, n, { bits[bitcnt] = bit ? 1 : 0; }, { bits[bitcnt] = 0; });
 }
 
 PyObject *mul_bit_quad(PyObject *self,
@@ -515,26 +506,26 @@ static struct PyModuleDef _internal = {PyModuleDef_HEAD_INIT, "_internal", NULL,
                                        -1, methods};
 
 #define INIT_TYPE(type)              \
-	{                                \
+	do {                             \
 		if (PyType_Ready(&type) < 0) \
 			return NULL;             \
-	}
+	} while (0)
 
 #define ADD_TYPE(mod, type)                     \
-	{                                           \
+	do {                                        \
 		if (PyModule_AddType(mod, &type) < 0) { \
 			Py_DECREF(mod);                     \
 			return NULL;                        \
 		}                                       \
-	}
+	} while (0)
 
 PyMODINIT_FUNC PyInit__internal(void) {
-	INIT_TYPE(AffineSpace_Type)
-	INIT_TYPE(AffineSpaceIterable_Type)
+	INIT_TYPE(AffineSpace_Type);
+	INIT_TYPE(AffineSpaceIterable_Type);
 	PyObject *mod = PyModule_Create(&_internal);
 	if (mod == NULL)
 		return NULL;
-	ADD_TYPE(mod, AffineSpace_Type)
-	ADD_TYPE(mod, AffineSpaceIterable_Type)
+	ADD_TYPE(mod, AffineSpace_Type);
+	ADD_TYPE(mod, AffineSpaceIterable_Type);
 	return mod;
 }
