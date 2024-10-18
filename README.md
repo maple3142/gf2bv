@@ -12,7 +12,7 @@ Clone the repository and install the package with pip:
 pip install .
 ```
 
-Currently only tested with Python 3.10 and 3.12.
+Requires Python 3.11 or later.
 
 ## Usage
 
