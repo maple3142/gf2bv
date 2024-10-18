@@ -376,10 +376,19 @@ static PyObject *mul_bit_quad(PyObject *self,
 
 static PyMethodDef methods[] = {
     {"m4ri_solve", _PyCFunction_CAST(m4ri_solve), METH_FASTCALL,
+     "m4ri_solve(equations, cols, all)\n"
+     "--\n"
+     "\n"
      "Solve a linear system over GF(2) with M4RI"},
     {"to_bits", _PyCFunction_CAST(to_bits), METH_FASTCALL,
+     "to_bits(n, number)\n"
+     "--\n"
+     "\n"
      "Convert an integer to a list of bits"},
     {"mul_bit_quad", _PyCFunction_CAST(mul_bit_quad), METH_FASTCALL,
+     "mul_bit_quad(n, a, b, v, basis)\n"
+     "--\n"
+     "\n"
      "Multiply two linear symbolic bits to a linearized quadratic symbolic "
      "bit"},
     {NULL, NULL, 0, NULL}};
