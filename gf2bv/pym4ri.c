@@ -82,19 +82,36 @@ static PyTypeObject SolutionIter_Type = {
     .tp_iternext = (iternextfunc)solveiter_next,
 };
 
-static PyObject *solve(PyObject *self, PyObject *args) {
+static PyObject *solve(PyObject *self,
+                       PyObject *const *args,
+                       Py_ssize_t nargs) {
 	PyObject *linsys_list;
 	Py_ssize_t cols;
 	int all = 0;
 	// parse the arguments: (list, cols, all)
-	if (!PyArg_ParseTuple(args, "O!np", &PyList_Type, &linsys_list, &cols,
-	                      &all))
+	// if (!PyArg_ParseTuple(args, "O!np", &PyList_Type, &linsys_list, &cols,
+	//                       &all))
+	// 	return NULL;
+	if (nargs != 3) {
+		PyErr_SetString(PyExc_TypeError, "solve requires 3 arguments");
 		return NULL;
+	}
+	linsys_list = args[0];
+	if (!PyList_Check(linsys_list)) {
+		PyErr_SetString(PyExc_TypeError,
+		                "The first argument equations must be a list");
+		return NULL;
+	}
+	cols = PyLong_AsSsize_t(args[1]);
 	if (cols < 0) {
+		if (cols == -1 && PyErr_Occurred()) {
+			return NULL;
+		}
 		PyErr_SetString(PyExc_ValueError,
 		                "Number of columns must be non-negative");
 		return NULL;
 	}
+	all = PyObject_IsTrue(args[2]);
 	Py_ssize_t rows = PyList_Size(linsys_list);
 	if (rows < cols) {
 		PyErr_SetString(PyExc_ValueError,
@@ -224,15 +241,30 @@ static PyObject *solve(PyObject *self, PyObject *args) {
 #define PythonFalse Py_NewRef(Py_False)
 #endif
 
-static PyObject *to_bits(PyObject *self, PyObject *args) {
+static PyObject *to_bits(PyObject *self,
+                         PyObject *const *args,
+                         Py_ssize_t nargs) {
 	// parse the arguments: (n: int, a: bigint)
 	// convert a bigint to a list of booleans of length n, little-endian
 	Py_ssize_t n;
 	PyObject *a;
-	if (!PyArg_ParseTuple(args, "nO!", &n, &PyLong_Type, &a))
+	// if (!PyArg_ParseTuple(args, "nO!", &n, &PyLong_Type, &a))
+	// 	return NULL;
+	if (nargs != 2) {
+		PyErr_SetString(PyExc_TypeError, "to_bits requires 2 arguments");
 		return NULL;
+	}
+	n = PyLong_AsSsize_t(args[0]);
 	if (n < 0) {
+		if (n == -1 && PyErr_Occurred()) {
+			return NULL;
+		}
 		PyErr_SetString(PyExc_ValueError, "n must be non-negative");
+		return NULL;
+	}
+	a = args[1];
+	if (!PyLong_Check(a)) {
+		PyErr_SetString(PyExc_TypeError, "a must be an integer");
 		return NULL;
 	}
 	PyObject *list = PyList_New(n);
@@ -269,36 +301,57 @@ void set_bits(char *bits, Py_ssize_t n, PyLongObject *o) {
 	}
 }
 
-static PyObject *mul_bit_quad(PyObject *self, PyObject *args) {
+static PyObject *mul_bit_quad(PyObject *self,
+                              PyObject *const *args,
+                              Py_ssize_t nargs) {
 	Py_ssize_t n;
 	PyObject *a, *b, *v, *basis;
-	if (!PyArg_ParseTuple(args, "nO!O!O!O!", &n, &PyLong_Type, &a, &PyLong_Type,
-	                      &b, &PyLong_Type, &v, &PyList_Type, &basis))
+	// if (!PyArg_ParseTuple(args, "nO!O!O!O!", &n, &PyLong_Type, &a, &PyLong_Type,
+	//                       &b, &PyLong_Type, &v, &PyList_Type, &basis))
+	// 	return NULL;
+	if (nargs != 5) {
+		PyErr_SetString(PyExc_TypeError, "mul_bit_quad requires 5 arguments");
 		return NULL;
-	if (n < 0) {
-		PyErr_SetString(PyExc_ValueError, "n must be non-negative");
+	}
+	n = PyLong_AsSsize_t(args[0]);
+	if (n <= 0) {
+		if (n == -1 && PyErr_Occurred()) {
+			return NULL;
+		}
+		PyErr_SetString(PyExc_ValueError, "n must be positive");
+		return NULL;
+	}
+	a = args[1];
+	b = args[2];
+	v = args[3];
+	if (!PyLong_Check(a) || !PyLong_Check(b) || !PyLong_Check(v)) {
+		PyErr_SetString(PyExc_TypeError, "a and b and v must be integers");
+		return NULL;
+	}
+	basis = args[4];
+	if (!PyList_Check(basis)) {
+		PyErr_SetString(PyExc_TypeError, "basis must be a list");
 		return NULL;
 	}
 	Py_ssize_t len_basis = PyList_GET_SIZE(basis);
-	if (len_basis != n * (n - 1) / 2) {
-		PyErr_SetString(PyExc_ValueError,
-		                "The length of basis must be n * (n - 1) / 2");
+	if (len_basis != 1 + n + n * (n - 1) / 2) {
+		PyErr_SetString(PyExc_ValueError, "The length of basis is not correct");
 		return NULL;
 	}
 	char *a_bits = malloc(n);
 	set_bits(a_bits, n, (PyLongObject *)a);
 	char *b_bits = malloc(n);
 	set_bits(b_bits, n, (PyLongObject *)b);
-	int mi = 0;
 
 	Py_INCREF(v);  // invariant: v is a strong reference
+
+	int mi = 1 + n;
 	for (int i = 0; i < n; i++) {
 		for (int j = 0; j < i; j++) {
 			int r = (a_bits[i] & b_bits[j]) ^ (a_bits[j] & b_bits[i]);
 			if (r) {
 				PyObject *ret = PyNumber_Or(v, PyList_GetItem(basis, mi));
 				if (ret == NULL) {
-					puts("bad");
 					free(a_bits);
 					free(b_bits);
 					PyErr_SetString(PyExc_TypeError,
@@ -317,11 +370,13 @@ static PyObject *mul_bit_quad(PyObject *self, PyObject *args) {
 }
 
 static PyMethodDef methods[] = {
-    {"solve", solve, METH_VARARGS,
+    {"solve", _PyCFunction_CAST(solve), METH_FASTCALL,
      "Solve a linear system over GF(2) with M4RI"},
-    {"to_bits", to_bits, METH_VARARGS, "Convert an integer to a list of bits"},
-    {"mul_bit_quad", mul_bit_quad, METH_VARARGS,
-     "Multiply two integers using the quadratic formula"},
+    {"to_bits", _PyCFunction_CAST(to_bits), METH_FASTCALL,
+     "Convert an integer to a list of bits"},
+    {"mul_bit_quad", _PyCFunction_CAST(mul_bit_quad), METH_FASTCALL,
+     "Multiply two linear symbolic bits to a linearized quadratic symbolic "
+     "bit"},
     {NULL, NULL, 0, NULL}};
 
 static struct PyModuleDef pym4ri = {PyModuleDef_HEAD_INIT, "pym4ri", NULL, -1,

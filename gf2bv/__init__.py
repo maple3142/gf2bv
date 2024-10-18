@@ -216,7 +216,6 @@ class QuadraticSystem(LinearSystem):
         self._lin_size = n
         self._const_lin_mask = (1 << (1 + n)) - 1
         self._quad_size = quad_terms
-        self._qbasis = self._basis[-self._quad_size :]
 
     def gens(self):
         return super().gens()[:-1]
@@ -253,7 +252,7 @@ class QuadraticSystem(LinearSystem):
         # constant term and linear terms (x^2 = x in GF(2))
         v = (a & self._const_lin_mask) & b
         # quadratic terms
-        return mul_bit_quad(self._lin_size, a >> 1, b >> 1, v, self._qbasis)
+        return mul_bit_quad(self._lin_size, a >> 1, b >> 1, v, self._basis)
 
     def _check_lin_match_quad(self, lin: int, quad: int):
         n = self._lin_size
