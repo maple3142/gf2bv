@@ -12,20 +12,19 @@ def nlfsr_ex_test(LFSR):
 
     # not 2**14 + 1000 because I want to make it possible to result in DimensionTooLargeError
     N = 2**14
+    qsys = QuadraticSystem([128])
+    (x,) = qsys.gens()
 
     # note that for a given LFSR, its system is the same
     # so we can precompute the system and reuse it
     cache_file_name = Path(__file__).parent / f"cache_{LFSR.__name__}.pkl"
     try:
         with open(cache_file_name, "rb") as f:
-            qsys, maybe_zeros = pickle.load(f)
-            (x,) = qsys.gens()
+            maybe_zeros = pickle.load(f)
         assert len(maybe_zeros) == N
         print("cache found, reusing...")
     except:
         print("cache not found, generating...")
-        qsys = QuadraticSystem([128])
-        (x,) = qsys.gens()
         lfsr_sys = LFSR(128, mask, x)
         maybe_zeros = []
         for o in trange(N):
@@ -37,7 +36,8 @@ def nlfsr_ex_test(LFSR):
             maybe_zeros.append(z)
         with open(cache_file_name, "wb") as f:
             # yes, it can be trivially serialized using pickle
-            pickle.dump((qsys, maybe_zeros), f)
+            pickle.dump(maybe_zeros, f)
+            # dumping the system is also supported, but you don't need to do that
 
     # then generate the outputs
     init = secrets.randbits(n)

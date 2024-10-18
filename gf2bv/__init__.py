@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Any, Union
 from operator import xor
 from functools import reduce
 from ._internal import m4ri_solve, to_bits, mul_bit_quad, AffineSpace
@@ -111,6 +111,9 @@ class LinearSystem:
     def gens(self):
         return self._vars
 
+    def __reduce__(self):
+        return (self.__class__, (self._sizes,))
+
     def get_sage_mat(self, zeros: list[BitVec], tqdm=lambda x, desc: x):
         """
         Convert the system of equations to Sage, return a matrix A and a vector b such that Ax = b
@@ -204,8 +207,14 @@ class QuadraticSystem(LinearSystem):
         self._const_lin_mask = (1 << (1 + n)) - 1
         self._quad_size = quad_terms
 
+        # for pickle
+        self._quad_init_sizes = sizes
+
     def gens(self):
         return super().gens()[:-1]
+
+    def __reduce__(self):
+        return (self.__class__, (self._quad_init_sizes,))
 
     def mul_bit_slow(self, a: int, b: int):
         # TODO: find a way to optimize this
