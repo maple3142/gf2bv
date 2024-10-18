@@ -168,10 +168,14 @@ class LinearSystem:
         assert s == 0, "Invalid solution"
         return tuple(sol)
 
-    def solve_all(self, zeros: Zeros):
+    def solve_all(self, zeros: Zeros, max_dimension: int = 16):
         space = self.solve_raw(zeros, 1)
         if space is None:
             return
+        if space.dimension > max_dimension:
+            raise ValueError(
+                f"Solution space (dim {space.dimension}) is too large, try increase max_dimension ({max_dimension}) if you want (there will be 2**dim solutions)"
+            )
         for s in space:
             ret = self.convert_sol(s)
             if ret is not None:
