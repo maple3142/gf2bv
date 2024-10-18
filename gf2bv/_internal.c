@@ -72,7 +72,8 @@ static void solveiter_dealloc(SolutionIterObject *self) {
 }
 
 static PyTypeObject SolutionIter_Type = {
-    .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name = "pym4ri.SolutionIter",
+    .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name =
+        "_internal.SolutionIter",
     .tp_basicsize = sizeof(SolutionIterObject),
     .tp_itemsize = 0,
     .tp_dealloc = (destructor)solveiter_dealloc,
@@ -82,9 +83,9 @@ static PyTypeObject SolutionIter_Type = {
     .tp_iternext = (iternextfunc)solveiter_next,
 };
 
-static PyObject *solve(PyObject *self,
-                       PyObject *const *args,
-                       Py_ssize_t nargs) {
+static PyObject *m4ri_solve(PyObject *self,
+                            PyObject *const *args,
+                            Py_ssize_t nargs) {
 	PyObject *linsys_list;
 	Py_ssize_t cols;
 	int all = 0;
@@ -93,7 +94,7 @@ static PyObject *solve(PyObject *self,
 	//                       &all))
 	// 	return NULL;
 	if (nargs != 3) {
-		PyErr_SetString(PyExc_TypeError, "solve requires 3 arguments");
+		PyErr_SetString(PyExc_TypeError, "m4ri_solve requires 3 arguments");
 		return NULL;
 	}
 	linsys_list = args[0];
@@ -370,7 +371,7 @@ static PyObject *mul_bit_quad(PyObject *self,
 }
 
 static PyMethodDef methods[] = {
-    {"solve", _PyCFunction_CAST(solve), METH_FASTCALL,
+    {"m4ri_solve", _PyCFunction_CAST(m4ri_solve), METH_FASTCALL,
      "Solve a linear system over GF(2) with M4RI"},
     {"to_bits", _PyCFunction_CAST(to_bits), METH_FASTCALL,
      "Convert an integer to a list of bits"},
@@ -379,9 +380,9 @@ static PyMethodDef methods[] = {
      "bit"},
     {NULL, NULL, 0, NULL}};
 
-static struct PyModuleDef pym4ri = {PyModuleDef_HEAD_INIT, "pym4ri", NULL, -1,
-                                    methods};
+static struct PyModuleDef _internal = {PyModuleDef_HEAD_INIT, "_internal", NULL,
+                                       -1, methods};
 
-PyMODINIT_FUNC PyInit_pym4ri(void) {
-	return PyModule_Create(&pym4ri);
+PyMODINIT_FUNC PyInit__internal(void) {
+	return PyModule_Create(&_internal);
 }

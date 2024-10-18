@@ -1,7 +1,7 @@
 from typing import Union
 from operator import xor
 from functools import reduce
-from .pym4ri import solve, to_bits, mul_bit_quad
+from ._internal import m4ri_solve, to_bits, mul_bit_quad
 
 
 class BitVec:
@@ -158,7 +158,7 @@ class LinearSystem:
             eqs += [0] * (cols - len(eqs))
         # all mode: may return None if no solution, otherwise return an iterator
         # one solution mode: return the solution directly if it exists, otherwise return None
-        return solve(eqs, cols, all)
+        return m4ri_solve(eqs, cols, all)
 
     def convert_sol(self, s: int) -> Union[tuple[int], None]:
         sol = []
