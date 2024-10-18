@@ -71,6 +71,8 @@ static void solveiter_dealloc(SolutionIterObject *self) {
 	PyObject_GC_Del(self);
 }
 
+static void nop() {}
+
 static PyTypeObject SolutionIter_Type = {
     .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name =
         "_internal.SolutionIter",
@@ -78,6 +80,8 @@ static PyTypeObject SolutionIter_Type = {
     .tp_itemsize = 0,
     .tp_dealloc = (destructor)solveiter_dealloc,
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
+    .tp_traverse = (traverseproc)nop,
+    .tp_clear = (inquiry)nop,
     .tp_doc = NULL,
     .tp_iter = PyObject_SelfIter,
     .tp_iternext = (iternextfunc)solveiter_next,
@@ -383,6 +387,13 @@ static PyMethodDef methods[] = {
 static struct PyModuleDef _internal = {PyModuleDef_HEAD_INIT, "_internal", NULL,
                                        -1, methods};
 
+#define INIT_TYPE(type)              \
+	{                                \
+		if (PyType_Ready(&type) < 0) \
+			return NULL;             \
+	}
+
 PyMODINIT_FUNC PyInit__internal(void) {
+	INIT_TYPE(SolutionIter_Type)
 	return PyModule_Create(&_internal);
 }
