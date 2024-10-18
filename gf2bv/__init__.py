@@ -5,23 +5,18 @@ from ._internal import m4ri_solve, to_bits, mul_bit_quad, AffineSpace
 
 
 class BitVec:
-    __slots__ = ("sys", "bits")
+    __slots__ = ("bits",)
 
-    def __init__(self, sys: "LinearSystem", bits: list[int]):
-        self.sys = sys
+    def __init__(self, bits: list[int]):
         # this represent the symbolic bits of the BitVec
         # in little-endian order (lsb first)
         self.bits = bits
 
     def __copy__(self):
-        return BitVec(self.sys, self.bits[:])
+        return BitVec(self.bits[:])
 
     def __len__(self):
         return len(self.bits)
-
-    def _check_sys(self, other: "BitVec"):
-        if self.sys is not other.sys:
-            raise ValueError("Cannot mix bitvecs from different systems")
 
     def _check_len(self, other: "BitVec"):
         if len(self.bits) != len(other.bits):
@@ -30,59 +25,58 @@ class BitVec:
     def __xor__(self, other: Union["BitVec", int]):
         if not isinstance(other, BitVec):
             bs = to_bits(len(self.bits), other)
-            return BitVec(self.sys, list(map(xor, self.bits, bs)))
+            return BitVec(list(map(xor, self.bits, bs)))
         else:
-            self._check_sys(other)
             self._check_len(other)
-        return BitVec(self.sys, list(map(xor, self.bits, other.bits)))
+        return BitVec(list(map(xor, self.bits, other.bits)))
 
     __rxor__ = __xor__
     __pow__ = __xor__  # alias to __xor__, for convenience in sage
 
     def __rshift__(self, n: int):
-        return BitVec(self.sys, self.bits[n:] + [0] * n)
+        return BitVec(self.bits[n:] + [0] * n)
 
     def __lshift__(self, n: int):
-        return BitVec(self.sys, [0] * n + self.bits[:-n])
+        return BitVec([0] * n + self.bits[:-n])
 
     def __and__(self, mask: int):
         bs = to_bits(len(self.bits), mask)
-        return BitVec(self.sys, [0 if not b else a for a, b in zip(self.bits, bs)])
+        return BitVec([0 if not b else a for a, b in zip(self.bits, bs)])
 
     __rand__ = __and__
 
     def __or__(self, mask: int):
         bs = to_bits(len(self.bits), mask)
-        return BitVec(self.sys, [1 if b else a for a, b in zip(self.bits, bs)])
+        return BitVec([1 if b else a for a, b in zip(self.bits, bs)])
 
     __ror__ = __or__
 
     def rotr(self, n: int):
-        return BitVec(self.sys, self.bits[n:] + self.bits[:n])
+        return BitVec(self.bits[n:] + self.bits[:n])
 
     def rotl(self, n: int):
-        return BitVec(self.sys, self.bits[-n:] + self.bits[:-n])
+        return BitVec(self.bits[-n:] + self.bits[:-n])
 
     def sum(self):
-        return BitVec(self.sys, [reduce(xor, self.bits)])
+        return BitVec([reduce(xor, self.bits)])
 
     def zeroext(self, n: int):
-        return BitVec(self.sys, self.bits + [0] * n)
+        return BitVec(self.bits + [0] * n)
 
     def signext(self, n: int):
-        return BitVec(self.sys, self.bits + [self.bits[-1]] * n)
+        return BitVec(self.bits + [self.bits[-1]] * n)
 
     def __getitem__(self, i: Union[int, slice]):
         if isinstance(i, slice):
-            return BitVec(self.sys, self.bits[i])
-        return BitVec(self.sys, [self.bits[i]])
+            return BitVec(self.bits[i])
+        return BitVec([self.bits[i]])
 
     def dup(self, n: int):
-        return BitVec(self.sys, self.bits * n)
+        return BitVec(self.bits * n)
 
     def concat(self, other: "BitVec"):
         self._check_sys(other)
-        return BitVec(self.sys, self.bits + other.bits)
+        return BitVec(self.bits + other.bits)
 
 
 Zeros = list[Union[BitVec, int]]
@@ -104,7 +98,7 @@ class LinearSystem:
         self._basis = [1 << i for i in range(1 + self._cols)]
         i = 1  # lsb used to represent constant term (affine part)
         for size in self._sizes:
-            self._vars.append(BitVec(self, self._basis[i : i + size]))
+            self._vars.append(BitVec(self._basis[i : i + size]))
             i += size
         self._vars = tuple(self._vars)
 
