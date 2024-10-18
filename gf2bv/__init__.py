@@ -17,15 +17,6 @@ class BitVec:
     def __len__(self):
         return len(self.bits)
 
-    def _cast_int(self, n: int):
-        if n < 0:
-            raise ValueError("Negative value")
-        st = [0] * len(self.bits)
-        for i in range(len(self.bits)):
-            st[i] = n & 1
-            n >>= 1
-        return BitVec(self.sys, st)
-
     def _check_sys(self, other: "BitVec"):
         if self.sys is not other.sys:
             raise ValueError("Cannot mix bitvecs from different systems")
@@ -36,7 +27,8 @@ class BitVec:
 
     def __xor__(self, other: Union["BitVec", int]):
         if not isinstance(other, BitVec):
-            other = self._cast_int(other)
+            bs = to_bits(len(self.bits), other)
+            return BitVec(self.sys, [a ^ b for a, b in zip(self.bits, bs)])
         else:
             self._check_sys(other)
             self._check_len(other)
