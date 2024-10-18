@@ -241,6 +241,57 @@ static PyTypeObject AffineSpace_Type = {
 
 #pragma endregion
 
+// https://github.com/malb/m4ri/blob/775189bfea96ffaeab460513413fcf4fbcd64392/m4ri/solve.c#L148
+mzd_t *_mzd_kernel_left_pluq(mzd_t *A,
+                             rci_t r,
+                             mzp_t *P,
+                             mzp_t *Q,
+                             int const cutoff) {
+	//   mzp_t *P = mzp_init(A->nrows);
+	//   mzp_t *Q = mzp_init(A->ncols);
+
+	//   rci_t r = mzd_pluq(A, P, Q, cutoff);
+
+	//   if (r == A->ncols) {
+	//     mzp_free(P);
+	//     mzp_free(Q);
+	//     __M4RI_DD_MZD(A);
+	//     return NULL;
+	//   }
+
+	if (r == A->ncols) {
+		return NULL;
+	}
+
+	mzd_t *U = mzd_init_window(A, 0, 0, r, r);
+
+	mzd_t *R = mzd_init(A->ncols, A->ncols - r);
+	mzd_t *RU = mzd_init_window(R, 0, 0, r, R->ncols);
+
+	for (rci_t i = 0; i < r; i++) {
+		for (rci_t j = 0; j < RU->ncols; j += m4ri_radix) {
+			const int workload = MIN(m4ri_radix, RU->ncols - j);
+			mzd_xor_bits(RU, i, j, workload,
+			             mzd_read_bits(A, i, r + j, workload));
+		}
+	}
+
+	mzd_trsm_upper_left(U, RU, cutoff);
+
+	for (rci_t i = 0; i < R->ncols; ++i) {
+		mzd_write_bit(R, r + i, i, 1);
+	}
+	mzd_apply_p_left_trans(R, Q);
+	// mzp_free(P);
+	// mzp_free(Q);
+	mzd_free_window(RU);
+	mzd_free_window(U);
+
+	// __M4RI_DD_MZD(A);
+	// __M4RI_DD_MZD(R);
+	return R;
+}
+
 PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 	PyObject *linsys_list;
 	Py_ssize_t cols;
@@ -271,7 +322,6 @@ PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 		PyErr_SetString(PyExc_ValueError, "Invalid mode");
 		return NULL;
 	}
-	int need_kernel = mode == SOLVE_MODE_ALL;
 	Py_ssize_t rows = PyList_Size(linsys_list);
 	if (rows < cols) {
 		PyErr_SetString(PyExc_ValueError,
@@ -311,49 +361,44 @@ PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 		                 {});
 	}
 
+	mzp_t *P = mzp_init(A->nrows);
+	mzp_t *Q = mzp_init(A->ncols);
+	rci_t r = _mzd_pluq(A, P, Q, 0);
+
 	// first, find the base solution
-	mzd_t *origin;
+	mzd_t *sol0;
 	{
-		mzd_t *A_copy = 0;
 		if (B_is_not_zero) {
-			if (need_kernel) {
-				A_copy = mzd_copy(NULL, A);
-			}
-			// printf("A->nrows: %d, A->ncols: %d\n", A->nrows, A->ncols);
-			// printf("B->nrows: %d, B->ncols: %d\n", B->nrows, B->ncols);
 			// this is actually solve_right in Sage...
-			if (mzd_solve_left(A, B, 0, 1) != 0) {
+			if (_mzd_pluq_solve_left(A, r, P, Q, B, 0, 1) != 0) {
 				mzd_free(A);
 				mzd_free(B);
-				if (need_kernel) {
-					mzd_free(A_copy);
-				}
+				mzp_free(P);
+				mzp_free(Q);
 				return Py_None;
 			}
 			// the base solution is stored in B as column vector
 			B->nrows = cols;
-			origin = mzd_transpose(0, B);
-			mzd_free(A);  // A is overwritten by mzd_solve_left
-			A = A_copy;
+			sol0 = mzd_transpose(0, B);
 		} else {
 			// the trivial solution
-			origin = mzd_init(1, cols);
+			sol0 = mzd_init(1, cols);
 		}
 	}
 	mzd_free(B);
-	// if need_kernel: A, origin is valid
-	// else: A is valid or 0, origin is valid
+	// A, sol0, P, Q is valid
 
 	// if we only need one solution, return it
 	if (mode == SOLVE_MODE_SINGLE) {
 		char *str = malloc(cols + 1);
 		str[cols] = '\0';
-		PyObject *ret = mzd_vector_to_pylong(str, origin);
+		PyObject *ret = mzd_vector_to_pylong(str, sol0);
 		free(str);
-		mzd_free(origin);
-		if (A) {
-			mzd_free(A);
-		}
+
+		mzd_free(A);
+		mzd_free(sol0);
+		mzp_free(P);
+		mzp_free(Q);
 		return ret;
 	}
 
@@ -361,8 +406,11 @@ PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 	mzd_t *tker;
 	{
 		// and this is right_kernel_matrix
-		mzd_t *ker = mzd_kernel_left_pluq(A, 0);
+		// mzd_t *ker = mzd_kernel_left_pluq(A, 0);
+		mzd_t *ker = _mzd_kernel_left_pluq(A, r, P, Q, 0);
 		mzd_free(A);
+		mzp_free(P);
+		mzp_free(Q);
 		if (ker == NULL) {
 			tker = mzd_init(0, 0);
 		} else {
@@ -370,11 +418,13 @@ PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 			mzd_free(ker);
 		}
 	}
-	// now, only origin and tker is valid
+	// now, only sol0 and tker is valid
 
+	// create the affine space object and return it
+	// sol0 and tker are tracked by it
 	AffineSpaceObject *it =
 	    PyObject_GC_New(AffineSpaceObject, &AffineSpace_Type);
-	it->origin = origin;
+	it->origin = sol0;
 	it->basis = tker;
 	PyObject_GC_Track(it);
 	return (PyObject *)it;
