@@ -25,8 +25,8 @@ static PyObject *mzd_vector_to_pylong(char *buf, mzd_t *v) {
 }
 
 typedef struct {
-	PyObject_HEAD mzd_t *sol0;
-	mzd_t *kernel;
+	PyObject_HEAD mzd_t *origin;
+	mzd_t *basis;
 } AffineSpaceObject;
 
 typedef struct {
@@ -37,38 +37,38 @@ typedef struct {
 
 static void affinespace_dealloc(AffineSpaceObject *self) {
 	PyObject_GC_UnTrack(self);
-	mzd_free(self->sol0);
-	mzd_free(self->kernel);
+	mzd_free(self->origin);
+	mzd_free(self->basis);
 	PyObject_GC_Del(self);
 }
 
-static PyObject *affinespaceiterable_next(AffineSpaceIterableObject *it) {
+static PyObject *affinespaceiterable_next(AffineSpaceIterableObject *self) {
 	// TODO: use gray code for more efficient enumeration
 
 	mzd_t *result;
 	rci_t n, r;
 	int sentinel;
-	AffineSpaceObject *space = it->space;
+	AffineSpaceObject *space = self->space;
 
-	n = space->kernel->nrows;
-	if (it->state[n])
+	n = space->basis->nrows;
+	if (self->state[n])
 		return NULL; /* StopIteration */
 
-	result = mzd_copy(NULL, space->sol0);
+	result = mzd_copy(NULL, space->origin);
 	for (r = 0; r < n; r++)
-		if (it->state[r])
-			mzd_combine_even_in_place(result, 0, 0, space->kernel, r, 0);
+		if (self->state[r])
+			mzd_combine_even_in_place(result, 0, 0, space->basis, r, 0);
 
 	sentinel = 1;
 	for (r = 0; r < n; r++) {
-		if ((it->state[r] ^= 1)) {
+		if ((self->state[r] ^= 1)) {
 			sentinel = 0;
 			break;
 		}
 	}
-	it->state[n] = sentinel;
+	self->state[n] = sentinel;
 
-	PyObject *ret = mzd_vector_to_pylong(it->str, result);
+	PyObject *ret = mzd_vector_to_pylong(self->str, result);
 	mzd_free(result);
 	return ret;
 }
@@ -82,8 +82,8 @@ static void affinespaceiterable_dealloc(AffineSpaceIterableObject *self) {
 }
 
 static int affinespaceiterable_traverse(AffineSpaceIterableObject *self,
-                              visitproc visit,
-                              void *arg) {
+                                        visitproc visit,
+                                        void *arg) {
 	Py_VISIT(self->space);
 	return 0;
 }
@@ -112,14 +112,47 @@ static PyObject *affinespace_iter(PyObject *self) {
 	AffineSpaceIterableObject *it =
 	    PyObject_GC_New(AffineSpaceIterableObject, &AffineSpaceIterable_Type);
 	it->space = (AffineSpaceObject *)self;
-	it->state = malloc(it->space->kernel->nrows + 1);
-	it->str = malloc(it->space->sol0->ncols + 1);
-	it->str[it->space->sol0->ncols] = '\0';
-	memset(it->state, 0, it->space->kernel->nrows + 1);
+	it->state = malloc(it->space->basis->nrows + 1);
+	it->str = malloc(it->space->origin->ncols + 1);
+	it->str[it->space->origin->ncols] = '\0';
+	memset(it->state, 0, it->space->basis->nrows + 1);
 	Py_INCREF(self);
 	PyObject_GC_Track(it);
 	return (PyObject *)it;
 }
+
+static PyObject *affinespace_get_dimension(AffineSpaceObject *self) {
+	return PyLong_FromLong(self->basis->nrows);
+}
+
+static PyObject *affinespace_get_origin(AffineSpaceObject *self) {
+	char *str = malloc(self->origin->ncols + 1);
+	str[self->origin->ncols] = '\0';
+	PyObject *ret = mzd_vector_to_pylong(str, self->origin);
+	free(str);
+	return ret;
+}
+
+static PyObject *affinespace_get_basis(AffineSpaceObject *self) {
+	PyObject *ret = PyTuple_New(self->basis->nrows);
+	char *str = malloc(self->basis->ncols + 1);
+	for (rci_t r = 0; r < self->basis->nrows; r++) {
+		str[self->basis->ncols] = '\0';
+		mzd_t *w =
+		    mzd_init_window(self->basis, r, 0, r + 1, self->basis->ncols);
+		PyTuple_SET_ITEM(ret, r, mzd_vector_to_pylong(str, w));
+		mzd_free_window(w);
+	}
+	free(str);
+	return ret;
+}
+
+static PyGetSetDef AffineSpace_getsetters[] = {
+    {"dimension", (getter)affinespace_get_dimension, NULL, NULL, NULL},
+    {"origin", (getter)affinespace_get_origin, NULL, NULL, NULL},
+    {"basis", (getter)affinespace_get_basis, NULL, NULL, NULL},
+    {NULL} /* Sentinel */
+};
 
 static void nop() {}
 
@@ -129,15 +162,15 @@ static PyTypeObject AffineSpace_Type = {
     .tp_itemsize = 0,
     .tp_dealloc = (destructor)affinespace_dealloc,
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
-    .tp_traverse = (traverseproc)nop,
-    .tp_clear = (inquiry)nop,
+    .tp_traverse = (traverseproc)nop,  // no Python objects to traverse
+    .tp_clear = (inquiry)nop,          // no Python objects to clear
     .tp_doc = NULL,
     .tp_iter = affinespace_iter,
+    .tp_getset = AffineSpace_getsetters,
 };
 
 #define SOLVE_MODE_SINGLE 0
 #define SOLVE_MODE_ALL 1
-#define SOLVE_MODE_AFFINE_SPACE 2
 
 static PyObject *m4ri_solve(PyObject *self,
                             PyObject *const *args,
@@ -167,12 +200,11 @@ static PyObject *m4ri_solve(PyObject *self,
 	if (mode == -1 && PyErr_Occurred()) {
 		return NULL;
 	}
-	if (mode != SOLVE_MODE_SINGLE && mode != SOLVE_MODE_ALL &&
-	    mode != SOLVE_MODE_AFFINE_SPACE) {
+	if (mode != SOLVE_MODE_SINGLE && mode != SOLVE_MODE_ALL) {
 		PyErr_SetString(PyExc_ValueError, "Invalid mode");
 		return NULL;
 	}
-	int need_kernel = mode == SOLVE_MODE_ALL || mode == SOLVE_MODE_AFFINE_SPACE;
+	int need_kernel = mode == SOLVE_MODE_ALL;
 	Py_ssize_t rows = PyList_Size(linsys_list);
 	if (rows < cols) {
 		PyErr_SetString(PyExc_ValueError,
@@ -218,7 +250,7 @@ static PyObject *m4ri_solve(PyObject *self,
 	}
 
 	// first, find the base solution
-	mzd_t *sol0;
+	mzd_t *origin;
 	{
 		mzd_t *A_copy = 0;
 		if (B_is_not_zero) {
@@ -238,32 +270,32 @@ static PyObject *m4ri_solve(PyObject *self,
 			}
 			// the base solution is stored in B as column vector
 			B->nrows = cols;
-			sol0 = mzd_transpose(0, B);
+			origin = mzd_transpose(0, B);
 			mzd_free(A);  // A is overwritten by mzd_solve_left
 			A = A_copy;
 		} else {
 			// the trivial solution
-			sol0 = mzd_init(1, cols);
+			origin = mzd_init(1, cols);
 		}
 	}
 	mzd_free(B);
-	// if need_kernel: A, sol0 is valid
-	// else: A is valid or 0, sol0 is valid
+	// if need_kernel: A, origin is valid
+	// else: A is valid or 0, origin is valid
 
 	// if we only need one solution, return it
 	if (mode == SOLVE_MODE_SINGLE) {
 		char *str = malloc(cols + 1);
 		str[cols] = '\0';
-		PyObject *ret = mzd_vector_to_pylong(str, sol0);
+		PyObject *ret = mzd_vector_to_pylong(str, origin);
 		free(str);
-		mzd_free(sol0);
+		mzd_free(origin);
 		if (A) {
 			mzd_free(A);
 		}
 		return ret;
 	}
 
-	// compute the kernel
+	// compute the basis
 	mzd_t *tker;
 	{
 		// and this is right_kernel_matrix
@@ -276,44 +308,14 @@ static PyObject *m4ri_solve(PyObject *self,
 			mzd_free(ker);
 		}
 	}
-	// now, only sol0 and tker is valid
+	// now, only origin and tker is valid
 
-	if (mode == SOLVE_MODE_ALL) {
-		// AffineSpaceIterableObject *it =
-		//     PyObject_GC_New(AffineSpaceIterableObject, &AffineSpaceIterable_Type);
-		// it->sol0 = sol0;
-		// it->kernel = tker;
-		// it->state = malloc(tker->nrows + 1);
-		// it->str = malloc(cols + 1);
-		// it->str[cols] = '\0';
-		// memset(it->state, 0, tker->nrows + 1);
-
-		AffineSpaceObject *it =
-		    PyObject_GC_New(AffineSpaceObject, &AffineSpace_Type);
-		it->sol0 = sol0;
-		it->kernel = tker;
-		PyObject_GC_Track(it);
-		return (PyObject *)it;
-	} else {
-		// mode == SOLVE_MODE_AFFINE_SPACE
-		// we return a tuple (sol0, [k0, k1, ...])
-		PyObject *list = PyList_New(tker->nrows);
-		char *str = malloc(cols + 1);
-		str[cols] = '\0';
-		PyObject *sol0_pylong = mzd_vector_to_pylong(str, sol0);
-		for (rci_t r = 0; r < tker->nrows; r++) {
-			mzd_t *w = mzd_init_window(tker, r, 0, r + 1, tker->ncols);
-			PyList_SetItem(list, r, mzd_vector_to_pylong(str, w));
-			mzd_free_window(w);
-		}
-		free(str);
-		mzd_free(sol0);
-		mzd_free(tker);
-		PyObject *ret = PyTuple_Pack(2, sol0_pylong, list);
-		Py_DECREF(sol0_pylong);
-		Py_DECREF(list);
-		return ret;
-	}
+	AffineSpaceObject *it =
+	    PyObject_GC_New(AffineSpaceObject, &AffineSpace_Type);
+	it->origin = origin;
+	it->basis = tker;
+	PyObject_GC_Track(it);
+	return (PyObject *)it;
 }
 
 #if PY_VERSION_HEX >= 0x030C0000
