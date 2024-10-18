@@ -148,9 +148,59 @@ static PyObject *affinespace_get_basis(AffineSpaceObject *self) {
 }
 
 static PyGetSetDef AffineSpace_getsetters[] = {
-    {"dimension", (getter)affinespace_get_dimension, NULL, NULL, NULL},
-    {"origin", (getter)affinespace_get_origin, NULL, NULL, NULL},
-    {"basis", (getter)affinespace_get_basis, NULL, NULL, NULL},
+    {"dimension", (getter)affinespace_get_dimension, NULL,
+     "Dimension of the affine space", NULL},
+    {"origin", (getter)affinespace_get_origin, NULL,
+     "Origin of the affine space", NULL},
+    {"basis", (getter)affinespace_get_basis, NULL, "Basis of the affine space",
+     NULL},
+    {NULL} /* Sentinel */
+};
+
+static PyObject *affinespace_get(AffineSpaceObject *self,
+                                 PyObject *const *args,
+                                 Py_ssize_t nargs) {
+	PyObject *index;
+	if (nargs != 1) {
+		PyErr_SetString(PyExc_TypeError, "get requires 1 argument");
+	}
+	index = args[0];
+	if (!PyLong_Check(index)) {
+		PyErr_SetString(PyExc_TypeError, "Index must be an integer");
+		return NULL;
+	}
+	mzd_t *result = mzd_copy(NULL, self->origin);
+	rci_t nr = self->basis->nrows;
+
+	PyLongObject *n = (PyLongObject *)index;
+	Py_ssize_t n_digits = PyLong_DigitCount(n);
+	Py_ssize_t c = 0;
+	for (Py_ssize_t i = 0; i < n_digits && c < nr; i++) {
+		digit d = GET_OB_DIGITS(n)[i];
+		for (int j = 0; j < PyLong_SHIFT && c < nr; j++) {
+			if (d & 1) {
+				mzd_combine_even_in_place(result, 0, 0, self->basis, c, 0);
+			}
+			d >>= 1;
+			c++;
+		}
+	}
+
+	char *str = malloc(result->ncols + 1);
+	str[result->ncols] = '\0';
+	PyObject *ret = mzd_vector_to_pylong(str, result);
+	free(str);
+	mzd_free(result);
+	return ret;
+}
+
+static PyMethodDef AffineSpace_methods[] = {
+    {"get", _PyCFunction_CAST(affinespace_get), METH_FASTCALL,
+     "get(n)\n"
+     "--\n"
+     "\n"
+     "Get the n-th element of the affine space, should check 0 <= n < "
+     "2**(space.dimension) first."},
     {NULL} /* Sentinel */
 };
 
@@ -166,6 +216,7 @@ static PyTypeObject AffineSpace_Type = {
     .tp_clear = (inquiry)nop,          // no Python objects to clear
     .tp_doc = NULL,
     .tp_iter = affinespace_iter,
+    .tp_methods = AffineSpace_methods,
     .tp_getset = AffineSpace_getsetters,
 };
 
@@ -473,7 +524,8 @@ static PyMethodDef methods[] = {
      "\n"
      "Multiply two linear symbolic bits to a linearized quadratic symbolic "
      "bit"},
-    {NULL, NULL, 0, NULL}};
+    {NULL} /* Sentinel */
+};
 
 static struct PyModuleDef _internal = {PyModuleDef_HEAD_INIT, "_internal", NULL,
                                        -1, methods};
