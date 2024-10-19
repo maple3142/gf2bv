@@ -65,14 +65,22 @@ def nlfsr_ex_test(LFSR):
         # note that we are dealing we a quadratic system by linearization
         # so asserting a bit equality is more than just adding `x.bits[i] ^ bit` to the zeros
         # QuadraticSystem has a helper method to do this called `bit_assert`
-        # for example, we can try to bruteforce lowest 2 bits in x like this:
+        # for example, we can try to bruteforce 2 bits in x like this:
         for b0, b1 in itertools.product([0, 1], repeat=2):
             sol_tuple = qsys.solve_one(
-                zeros + qsys.bit_assert(x.bits[0], b0) + qsys.bit_assert(x.bits[1], b1)
+                zeros
+                # we can assert a single bit:
+                + qsys.bit_assert(x.bits[0], b0)
+                # and some linear combinations of bits:
+                + qsys.bit_assert(x.bits[1] ^ x.bits[2] ^ x.bits[87], b1)
             )
             print(b0, b1, sol_tuple)
             if sol_tuple:
                 assert sol_tuple[0] == init
+                s = sol_tuple[0]
+                # check if the solution does match our guess
+                assert s & 1 == b0
+                assert ((s >> 1) & 1) ^ ((s >> 2) & 1) ^ ((s >> 87) & 1) == b1
 
 
 if __name__ == "__main__":

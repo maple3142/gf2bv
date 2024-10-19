@@ -253,12 +253,11 @@ class QuadraticSystem(LinearSystem):
         assert v in (0, 1), "Invalid bit"
         assert a not in (0, 1), "a should not be a constant"
         assert a >> self._lin_size == 0, "Not a linear term"
-        assert a.bit_count() == 1, "Not a simple linear term"
         zeros = [a ^ v]  # assert simple linear term
         # and it a linearized system, we can see that:
-        # bits[x] * bits[?] = 0 if v == bits[x] == 0
-        # bits[x] * bits[?] = bits[?] if v == bits[x] == 1
-        # and `a` represents bits[x], `b` represents bits[?]
+        # (bits[x] + bits[y] + ...) * bits[?] = 0 if v == 0
+        # (bits[x] + bits[y] + ...) * bits[?] = bits[?] if v == 1
+        # and `a` represents (bits[x] + bits[y] + ...), `b` represents bits[?]
         for i in range(1, 1 + self._lin_size):
             b = self._basis[i]  # linear term
             if a == b:
