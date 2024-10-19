@@ -47,7 +47,7 @@ def nlfsr_test(LFSR):
     for o in tqdm(out):
         lfsr_sys()
         if o == 1:
-            x0, x1, x2, x3, x4 = [lfsr_sys.state.bits[i] for i in select]
+            x0, x1, x2, x3, x4 = [lfsr_sys.state[i] for i in select]
             # this is same as the annihilator function
             z = qsys.mul_bit(x0, x1) ^ x0 ^ qsys.mul_bit(x1, x2) ^ x1 ^ x2 ^ 1
             zeros.append(z)

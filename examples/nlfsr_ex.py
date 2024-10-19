@@ -32,7 +32,7 @@ def nlfsr_ex_test(LFSR):
         maybe_zeros = []
         for o in trange(N):
             lfsr_sys()
-            x0, x1, x2, x3, x4 = [lfsr_sys.state.bits[i] for i in select]
+            x0, x1, x2, x3, x4 = [lfsr_sys.state[i] for i in select]
             # this is same as the annihilator function
             z = qsys.mul_bit(x0, x1) ^ x0 ^ qsys.mul_bit(x1, x2) ^ x1 ^ x2 ^ 1
             # maybe_zeros is like zeros, it is also the real zeros if the output is 1
@@ -66,16 +66,16 @@ def nlfsr_ex_test(LFSR):
         # Unluckily, the solution space is too large
         # So we have to resort to bruteforcing some known bits
         # note that we are dealing we a quadratic system by linearization
-        # so asserting a bit equality is more than just adding `x.bits[i] ^ bit` to the zeros
+        # so asserting a bit equality is more than just adding `x[i] ^ bit` to the zeros
         # QuadraticSystem has a helper method to do this called `bit_assert`
         # for example, we can try to bruteforce 2 bits in x like this:
         for b0, b1 in itertools.product([0, 1], repeat=2):
             sol_tuple = qsys.solve_one(
                 zeros
                 # we can assert a single bit:
-                + qsys.bit_assert(x.bits[0], b0)
+                + qsys.bit_assert(x[0], b0)
                 # and some linear combinations of bits:
-                + qsys.bit_assert(x.bits[1] ^ x.bits[2] ^ x.bits[87], b1)
+                + qsys.bit_assert(x[1] ^ x[2] ^ x[87], b1)
             )
             print(b0, b1, sol_tuple)
             if sol_tuple:

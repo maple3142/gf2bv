@@ -22,16 +22,18 @@ class BitVec:
     def __len__(self):
         return len(self.bits)
 
-    def _check_len(self, other: BitVec):
-        if len(self.bits) != len(other.bits):
-            raise ValueError("Cannot mix bitvecs of different lengths")
+    def __getitem__(self, key: int | slice):
+        if isinstance(key, slice):
+            return BitVec(self.bits[key])
+        return self.bits[key]
 
     def __xor__(self, other: BitVec | int):
         if not isinstance(other, BitVec):
             bs = to_bits(len(self.bits), other)
             return BitVec(list(map(xor, self.bits, bs)))
         else:
-            self._check_len(other)
+            if len(self.bits) != len(other.bits):
+                raise ValueError("Cannot mix bitvecs of different lengths")
         return BitVec(list(map(xor, self.bits, other.bits)))
 
     __rxor__ = __xor__
@@ -70,10 +72,8 @@ class BitVec:
     def signext(self, n: int):
         return BitVec(self.bits + [self.bits[-1]] * n)
 
-    def __getitem__(self, i: int | slice):
-        if isinstance(i, slice):
-            return BitVec(self.bits[i])
-        return BitVec([self.bits[i]])
+    def broadcast(self, i: int, n: int):
+        return BitVec([self.bits[i]] * n)
 
     def dup(self, n: int):
         return BitVec(self.bits * n)
