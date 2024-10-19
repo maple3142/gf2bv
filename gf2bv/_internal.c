@@ -1,4 +1,4 @@
-#include "_inernal.h"
+#include "_internal.h"
 
 // CPython does not have an public API for this yet
 // ref: https://github.com/aleaxit/gmpy/issues/467
