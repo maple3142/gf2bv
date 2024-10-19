@@ -171,8 +171,11 @@ class LinearSystem:
         assert s == 0, "Invalid solution"
         return tuple(sol)
 
+    def solve_space(self, zeros: Zeros):
+        return self.solve_raw(zeros, 1)
+
     def solve_all(self, zeros: Zeros, max_dimension: int = 16):
-        space = self.solve_raw(zeros, 1)
+        space = self.solve_space(zeros)
         if space is None:
             return
         if space.dimension > max_dimension:

@@ -378,7 +378,7 @@ PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 	if (mode == -1 && PyErr_Occurred()) {
 		return NULL;
 	}
-	if (mode != SOLVE_MODE_SINGLE && mode != SOLVE_MODE_ALL) {
+	if (mode != SOLVE_MODE_SINGLE && mode != SOLVE_MODE_AFFINE_SPACE) {
 		PyErr_SetString(PyExc_ValueError, "Invalid mode");
 		return NULL;
 	}

@@ -23,7 +23,7 @@ typedef struct {
 } AffineSpaceIterableObject;
 
 #define SOLVE_MODE_SINGLE 0
-#define SOLVE_MODE_ALL 1
+#define SOLVE_MODE_AFFINE_SPACE 1
 
 PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
 PyObject *to_bits(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
