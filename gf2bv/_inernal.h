@@ -11,7 +11,14 @@ typedef struct {
 
 typedef struct {
 	PyObject_HEAD AffineSpaceObject *space;
-	uint8_t *state;
+	// uint8_t *state;
+	union {
+		uint8_t *state;  // for naive enumeration
+		struct {
+			uint64_t idx;
+			mzd_t *cur;
+		} gray;  // for gray code enumeration
+	};
 	char *str;
 } AffineSpaceIterableObject;
 

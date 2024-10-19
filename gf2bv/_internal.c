@@ -56,9 +56,8 @@ static inline PyObject *mzd_vector_to_pylong(char *buf, mzd_t *v) {
 
 #pragma region AffineSpaceIterable
 
-PyObject *affinespaceiterable_next(AffineSpaceIterableObject *self) {
-	// TODO: use gray code for more efficient enumeration
-
+static PyObject *affinespaceiterable_next_naive(
+    AffineSpaceIterableObject *self) {
 	mzd_t *result;
 	rci_t n, r;
 	int sentinel;
@@ -87,10 +86,43 @@ PyObject *affinespaceiterable_next(AffineSpaceIterableObject *self) {
 	return ret;
 }
 
-static void affinespaceiterable_dealloc(AffineSpaceIterableObject *self) {
+static void affinespaceiterable_dealloc_naive(AffineSpaceIterableObject *self) {
 	PyObject_GC_UnTrack(self);
 	Py_DECREF(self->space);
 	free(self->state);
+	free(self->str);
+	PyObject_GC_Del(self);
+}
+
+static PyObject *affinespaceiterable_next_graycode(
+    AffineSpaceIterableObject *self) {
+	if (self->gray.cur == NULL) {
+		return NULL; /* StopIteration */
+	}
+	PyObject *ret = mzd_vector_to_pylong(self->str, self->gray.cur);
+
+	// use gray code to compute the next vector
+	uint64_t x = (self->gray.idx) ^ (self->gray.idx >> 1);
+	self->gray.idx++;
+	uint64_t y = (self->gray.idx) ^ (self->gray.idx >> 1);
+	int diff_idx = __builtin_ctzll(x ^ y);
+	if (diff_idx >= self->space->basis->nrows ||
+	    (self->space->basis->nrows == 64 && self->gray.idx == 0)) {
+		mzd_free(self->gray.cur);
+		self->gray.cur = NULL;
+		return ret;
+	}
+	mzd_combine_even_in_place(self->gray.cur, 0, 0, self->space->basis,
+	                          diff_idx, 0);
+	return ret;
+}
+
+static void affinespaceiterable_dealloc_graycode(
+    AffineSpaceIterableObject *self) {
+	PyObject_GC_UnTrack(self);
+	Py_DECREF(self->space);
+	if (self->gray.cur)
+		mzd_free(self->gray.cur);
 	free(self->str);
 	PyObject_GC_Del(self);
 }
@@ -112,13 +144,15 @@ static PyTypeObject AffineSpaceIterable_Type = {
         "_internal.AffineSpaceIterable",
     .tp_basicsize = sizeof(AffineSpaceIterableObject),
     .tp_itemsize = 0,
-    .tp_dealloc = (destructor)affinespaceiterable_dealloc,
+    // .tp_dealloc = (destructor)affinespaceiterable_dealloc_naive,
+    .tp_dealloc = (destructor)affinespaceiterable_dealloc_graycode,
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
     .tp_traverse = (traverseproc)affinespaceiterable_traverse,
     .tp_clear = (inquiry)affinespaceiterable_clear,
     .tp_doc = NULL,
     .tp_iter = PyObject_SelfIter,
-    .tp_iternext = (iternextfunc)affinespaceiterable_next,
+    // .tp_iternext = (iternextfunc)affinespaceiterable_next_naive,
+    .tp_iternext = (iternextfunc)affinespaceiterable_next_graycode,
 };
 
 #pragma endregion
@@ -126,14 +160,21 @@ static PyTypeObject AffineSpaceIterable_Type = {
 #pragma region AffineSpace
 
 static PyObject *affinespace_iter(PyObject *self) {
+	AffineSpaceObject *space = (AffineSpaceObject *)self;
+	if (space->basis->nrows > 64) {
+		PyErr_SetString(PyExc_NotImplementedError,
+		                "Gray code enumeration is not implemented for "
+		                "dimensions greater than 64");
+		return NULL;
+	}
 	// create an iterator object
 	AffineSpaceIterableObject *it =
 	    PyObject_GC_New(AffineSpaceIterableObject, &AffineSpaceIterable_Type);
-	it->space = (AffineSpaceObject *)self;
-	it->state = malloc(it->space->basis->nrows + 1);
+	it->space = space;
 	it->str = malloc(it->space->origin->ncols + 1);
 	it->str[it->space->origin->ncols] = '\0';
-	memset(it->state, 0, it->space->basis->nrows + 1);
+	it->gray.cur = mzd_copy(NULL, it->space->origin);
+	it->gray.idx = 0;
 	Py_INCREF(self);
 	PyObject_GC_Track(it);
 	return (PyObject *)it;
