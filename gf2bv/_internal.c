@@ -54,10 +54,10 @@ static inline PyObject *mzd_vector_to_pylong(char *buf, mzd_t *v) {
 		}                                                                     \
 	} while (0)
 
-#pragma region AffineSpaceIterable
+#pragma region AffineSpaceIterator
 
-static PyObject *affinespaceiterable_next_naive(
-    AffineSpaceIterableObject *self) {
+static PyObject *affinespaceiterator_next_naive(
+    AffineSpaceIteratorObject *self) {
 	mzd_t *result;
 	rci_t n, r;
 	int sentinel;
@@ -86,7 +86,7 @@ static PyObject *affinespaceiterable_next_naive(
 	return ret;
 }
 
-static void affinespaceiterable_dealloc_naive(AffineSpaceIterableObject *self) {
+static void affinespaceiterator_dealloc_naive(AffineSpaceIteratorObject *self) {
 	PyObject_GC_UnTrack(self);
 	Py_DECREF(self->space);
 	free(self->state);
@@ -94,8 +94,8 @@ static void affinespaceiterable_dealloc_naive(AffineSpaceIterableObject *self) {
 	PyObject_GC_Del(self);
 }
 
-static PyObject *affinespaceiterable_next_graycode(
-    AffineSpaceIterableObject *self) {
+static PyObject *affinespaceiterator_next_graycode(
+    AffineSpaceIteratorObject *self) {
 	if (self->gray.cur == NULL) {
 		return NULL; /* StopIteration */
 	}
@@ -117,8 +117,8 @@ static PyObject *affinespaceiterable_next_graycode(
 	return ret;
 }
 
-static void affinespaceiterable_dealloc_graycode(
-    AffineSpaceIterableObject *self) {
+static void affinespaceiterator_dealloc_graycode(
+    AffineSpaceIteratorObject *self) {
 	PyObject_GC_UnTrack(self);
 	Py_DECREF(self->space);
 	if (self->gray.cur)
@@ -128,46 +128,46 @@ static void affinespaceiterable_dealloc_graycode(
 	PyObject_GC_Del(self);
 }
 
-static int affinespaceiterable_traverse(AffineSpaceIterableObject *self,
+static int affinespaceiterator_traverse(AffineSpaceIteratorObject *self,
                                         visitproc visit,
                                         void *arg) {
 	Py_VISIT(self->space);
 	return 0;
 }
 
-static int affinespaceiterable_clear(AffineSpaceIterableObject *self) {
+static int affinespaceiterator_clear(AffineSpaceIteratorObject *self) {
 	Py_CLEAR(self->space);
 	return 0;
 }
 
 // only differes in tp_iternext and tp_dealloc
 
-static PyTypeObject AffineSpaceIterable_Type = {
+static PyTypeObject AffineSpaceIterator_Type = {
     .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name =
-        "_internal.AffineSpaceIterable",
-    .tp_basicsize = sizeof(AffineSpaceIterableObject),
+        "_internal.AffineSpaceIterator",
+    .tp_basicsize = sizeof(AffineSpaceIteratorObject),
     .tp_itemsize = 0,
-    .tp_dealloc = (destructor)affinespaceiterable_dealloc_graycode,
+    .tp_dealloc = (destructor)affinespaceiterator_dealloc_graycode,
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
-    .tp_traverse = (traverseproc)affinespaceiterable_traverse,
-    .tp_clear = (inquiry)affinespaceiterable_clear,
+    .tp_traverse = (traverseproc)affinespaceiterator_traverse,
+    .tp_clear = (inquiry)affinespaceiterator_clear,
     .tp_doc = NULL,
     .tp_iter = PyObject_SelfIter,
-    .tp_iternext = (iternextfunc)affinespaceiterable_next_graycode,
+    .tp_iternext = (iternextfunc)affinespaceiterator_next_graycode,
 };
 
-static PyTypeObject AffineSpaceIterableSlow_Type = {
+static PyTypeObject AffineSpaceIteratorSlow_Type = {
     .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name =
-        "_internal.AffineSpaceIterableSlow",
-    .tp_basicsize = sizeof(AffineSpaceIterableObject),
+        "_internal.AffineSpaceIteratorSlow",
+    .tp_basicsize = sizeof(AffineSpaceIteratorObject),
     .tp_itemsize = 0,
-    .tp_dealloc = (destructor)affinespaceiterable_dealloc_naive,
+    .tp_dealloc = (destructor)affinespaceiterator_dealloc_naive,
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
-    .tp_traverse = (traverseproc)affinespaceiterable_traverse,
-    .tp_clear = (inquiry)affinespaceiterable_clear,
+    .tp_traverse = (traverseproc)affinespaceiterator_traverse,
+    .tp_clear = (inquiry)affinespaceiterator_clear,
     .tp_doc = NULL,
     .tp_iter = PyObject_SelfIter,
-    .tp_iternext = (iternextfunc)affinespaceiterable_next_naive,
+    .tp_iternext = (iternextfunc)affinespaceiterator_next_naive,
 };
 
 #pragma endregion
@@ -180,11 +180,11 @@ static PyObject *affinespace_iter(PyObject *self) {
 	str[space->origin->ncols] = '\0';
 	int use_gray = space->basis->nrows <= 64;
 	PyTypeObject *type =
-	    use_gray ? &AffineSpaceIterable_Type : &AffineSpaceIterableSlow_Type;
+	    use_gray ? &AffineSpaceIterator_Type : &AffineSpaceIteratorSlow_Type;
 
 	// create an iterator object
-	AffineSpaceIterableObject *it =
-	    PyObject_GC_New(AffineSpaceIterableObject, type);
+	AffineSpaceIteratorObject *it =
+	    PyObject_GC_New(AffineSpaceIteratorObject, type);
 	it->space = space;
 	it->str = str;
 	if (use_gray) {
@@ -631,13 +631,13 @@ static struct PyModuleDef _internal = {PyModuleDef_HEAD_INIT, "_internal", NULL,
 
 PyMODINIT_FUNC PyInit__internal(void) {
 	INIT_TYPE(AffineSpace_Type);
-	INIT_TYPE(AffineSpaceIterable_Type);
-	INIT_TYPE(AffineSpaceIterableSlow_Type);
+	INIT_TYPE(AffineSpaceIterator_Type);
+	INIT_TYPE(AffineSpaceIteratorSlow_Type);
 	PyObject *mod = PyModule_Create(&_internal);
 	if (mod == NULL)
 		return NULL;
 	ADD_TYPE(mod, AffineSpace_Type);
-	ADD_TYPE(mod, AffineSpaceIterable_Type);
-	ADD_TYPE(mod, AffineSpaceIterableSlow_Type);
+	ADD_TYPE(mod, AffineSpaceIterator_Type);
+	ADD_TYPE(mod, AffineSpaceIteratorSlow_Type);
 	return mod;
 }

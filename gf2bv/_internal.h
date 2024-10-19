@@ -20,7 +20,7 @@ typedef struct {
 		} gray;  // for gray code enumeration
 	};
 	char *str;
-} AffineSpaceIterableObject;
+} AffineSpaceIteratorObject;
 
 #define SOLVE_MODE_SINGLE 0
 #define SOLVE_MODE_AFFINE_SPACE 1
