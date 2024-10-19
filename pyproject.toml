@@ -7,3 +7,13 @@ name = "gf2bv"
 version = "0.1.0"
 description = "Solving linear systems over GF(2) by manipulating bitvectors"
 requires-python = ">=3.11"
+
+[tool.mypy]
+python_version = "3.11"
+no_warn_no_return = true
+
+[[tool.mypy.overrides]]
+module = [
+    "sage.all"
+]
+ignore_missing_imports = true

@@ -1,7 +1,11 @@
-from typing import Any, Union, Optional
+from __future__ import annotations
+from typing import Any, Union, Optional, Literal, TypeVar, TYPE_CHECKING
+from collections.abc import Sequence
 from operator import xor
 from functools import reduce
 from ._internal import m4ri_solve, to_bits, mul_bit_quad, AffineSpace
+
+TSolveMode = TypeVar("TSolveMode", Literal[0], Literal[1])
 
 
 class BitVec:
@@ -18,11 +22,11 @@ class BitVec:
     def __len__(self):
         return len(self.bits)
 
-    def _check_len(self, other: "BitVec"):
+    def _check_len(self, other: BitVec):
         if len(self.bits) != len(other.bits):
             raise ValueError("Cannot mix bitvecs of different lengths")
 
-    def __xor__(self, other: Union["BitVec", int]):
+    def __xor__(self, other: BitVec | int):
         if not isinstance(other, BitVec):
             bs = to_bits(len(self.bits), other)
             return BitVec(list(map(xor, self.bits, bs)))
@@ -66,7 +70,7 @@ class BitVec:
     def signext(self, n: int):
         return BitVec(self.bits + [self.bits[-1]] * n)
 
-    def __getitem__(self, i: Union[int, slice]):
+    def __getitem__(self, i: int | slice):
         if isinstance(i, slice):
             return BitVec(self.bits[i])
         return BitVec([self.bits[i]])
@@ -74,11 +78,11 @@ class BitVec:
     def dup(self, n: int):
         return BitVec(self.bits * n)
 
-    def concat(self, other: "BitVec"):
+    def concat(self, other: BitVec):
         return BitVec(self.bits + other.bits)
 
 
-Zeros = list[Union[BitVec, int]]
+Zeros = Sequence[BitVec | int]
 
 
 class DimensionTooLargeError(Exception):
@@ -135,7 +139,7 @@ class LinearSystem:
             i += 1
         return mat, affine
 
-    def get_eqs(self, zeros: Zeros):
+    def get_eqs(self, zeros: Zeros) -> list[int]:
         """
         Convert zeros into a list of equations accepted by pym4ri.solve
         """
@@ -148,10 +152,9 @@ class LinearSystem:
                 (bv.bits if isinstance(bv, BitVec) else [bv] for bv in zeros),
             )
         )
-        eqs = list(filter(None, eqs))  # remove literal zeros
-        return eqs
+        return list(filter(None, eqs))  # remove literal zeros
 
-    def solve_raw(self, zeros: Zeros, mode: int):
+    def solve_raw(self, zeros: Zeros, mode: TSolveMode):
         eqs = self.get_eqs(zeros)
         if 1 in eqs:
             # no solution
@@ -175,7 +178,7 @@ class LinearSystem:
     def convert_sol(self, s: int) -> Optional[tuple[int, ...]]:
         return self._convert_sol(s)
 
-    def solve_space(self, zeros: Zeros):
+    def solve_space(self, zeros: Zeros) -> Optional[AffineSpace]:
         return self.solve_raw(zeros, 1)
 
     def solve_all(self, zeros: Zeros, max_dimension: int = 16):
