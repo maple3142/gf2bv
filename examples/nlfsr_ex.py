@@ -54,7 +54,8 @@ def nlfsr_ex_test(LFSR):
 
     # try to solve it
     try:
-        (sol,) = qsys.solve_one(zeros)
+        lo, hi = qsys.solve_one(zeros)
+        sol = lo | (hi << 64)
         print(f"{sol = :0{n}b}")
         assert sol == init
         print(

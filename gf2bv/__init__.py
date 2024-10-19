@@ -25,7 +25,9 @@ class BitVec:
     def __getitem__(self, key: int | slice):
         if isinstance(key, slice):
             return BitVec(self.bits[key])
-        return self.bits[key]
+        return BitVec(
+            [self.bits[key]]
+        )  # still wrap it to prevent misuse like bv[0] ^ bv
 
     def __xor__(self, other: BitVec | int):
         if not isinstance(other, BitVec):
@@ -220,7 +222,7 @@ class QuadraticSystem(LinearSystem):
     def __reduce__(self):
         return (self.__class__, (self._quad_init_sizes,))
 
-    def mul_bit_slow(self, a: int, b: int):
+    def _mul_bit_slow(self, a: int, b: int):
         # TODO: find a way to optimize this
         n = self._lin_size
         # constant term and linear terms (x^2 = x in GF(2))
@@ -248,13 +250,18 @@ class QuadraticSystem(LinearSystem):
         # assert (v >> (1 + self._lin_size + self._quad_size)) == 0, "Overflow"
         return v
 
-    def mul_bit(self, a: int, b: int) -> int:
+    def _mul_bit(self, a: int, b: int) -> int:
         # constant term and linear terms (x^2 = x in GF(2))
         v = (a & self._const_lin_mask) & b
         # quadratic terms
         return mul_bit_quad(self._lin_size, a >> 1, b >> 1, v, self._basis)
 
-    def bit_assert(self, a: int, v: int):
+    def mul_bit(self, a: BitVec, b: BitVec) -> BitVec:
+        if len(a) != 1 or len(b) != 1:
+            raise ValueError("The inputs should be single bits")
+        return BitVec([self._mul_bit(a.bits[0], b.bits[0])])
+
+    def _bit_assert(self, a: int, v: int):
         # this is to assert `a` bit is exactly equal to `v`
         assert v in (0, 1), "Invalid bit"
         assert a not in (0, 1), "a should not be a constant"
@@ -269,10 +276,15 @@ class QuadraticSystem(LinearSystem):
             if a == b:
                 continue
             if v == 0:
-                zeros.append(self.mul_bit(a, b))
+                zeros.append(self._mul_bit(a, b))
             else:
-                zeros.append(self.mul_bit(a, b) ^ b)
+                zeros.append(self._mul_bit(a, b) ^ b)
         return zeros
+
+    def bit_assert(self, a: BitVec, v: int) -> Zeros:
+        if len(a) != 1:
+            raise ValueError("The input should be a single bit")
+        return self._bit_assert(a.bits[0], v)
 
     def _check_lin_match_quad(self, lin: int, quad: int):
         n = self._lin_size
