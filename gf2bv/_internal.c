@@ -122,6 +122,7 @@ static void affinespaceiterable_dealloc_graycode(
 	PyObject_GC_UnTrack(self);
 	Py_DECREF(self->space);
 	if (self->gray.cur)
+		// if enumeration ended, self->gray.cur is NULL
 		mzd_free(self->gray.cur);
 	free(self->str);
 	PyObject_GC_Del(self);
@@ -139,20 +140,34 @@ static int affinespaceiterable_clear(AffineSpaceIterableObject *self) {
 	return 0;
 }
 
+// only differes in tp_iternext and tp_dealloc
+
 static PyTypeObject AffineSpaceIterable_Type = {
     .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name =
         "_internal.AffineSpaceIterable",
     .tp_basicsize = sizeof(AffineSpaceIterableObject),
     .tp_itemsize = 0,
-    // .tp_dealloc = (destructor)affinespaceiterable_dealloc_naive,
     .tp_dealloc = (destructor)affinespaceiterable_dealloc_graycode,
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
     .tp_traverse = (traverseproc)affinespaceiterable_traverse,
     .tp_clear = (inquiry)affinespaceiterable_clear,
     .tp_doc = NULL,
     .tp_iter = PyObject_SelfIter,
-    // .tp_iternext = (iternextfunc)affinespaceiterable_next_naive,
     .tp_iternext = (iternextfunc)affinespaceiterable_next_graycode,
+};
+
+static PyTypeObject AffineSpaceIterableSlow_Type = {
+    .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name =
+        "_internal.AffineSpaceIterableSlow",
+    .tp_basicsize = sizeof(AffineSpaceIterableObject),
+    .tp_itemsize = 0,
+    .tp_dealloc = (destructor)affinespaceiterable_dealloc_naive,
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
+    .tp_traverse = (traverseproc)affinespaceiterable_traverse,
+    .tp_clear = (inquiry)affinespaceiterable_clear,
+    .tp_doc = NULL,
+    .tp_iter = PyObject_SelfIter,
+    .tp_iternext = (iternextfunc)affinespaceiterable_next_naive,
 };
 
 #pragma endregion
@@ -161,20 +176,24 @@ static PyTypeObject AffineSpaceIterable_Type = {
 
 static PyObject *affinespace_iter(PyObject *self) {
 	AffineSpaceObject *space = (AffineSpaceObject *)self;
-	if (space->basis->nrows > 64) {
-		PyErr_SetString(PyExc_NotImplementedError,
-		                "Gray code enumeration is not implemented for "
-		                "dimensions greater than 64");
-		return NULL;
-	}
+	char *str = malloc(space->origin->ncols + 1);
+	str[space->origin->ncols] = '\0';
+	int use_gray = space->basis->nrows <= 64;
+	PyTypeObject *type =
+	    use_gray ? &AffineSpaceIterable_Type : &AffineSpaceIterableSlow_Type;
+
 	// create an iterator object
 	AffineSpaceIterableObject *it =
-	    PyObject_GC_New(AffineSpaceIterableObject, &AffineSpaceIterable_Type);
+	    PyObject_GC_New(AffineSpaceIterableObject, type);
 	it->space = space;
-	it->str = malloc(it->space->origin->ncols + 1);
-	it->str[it->space->origin->ncols] = '\0';
-	it->gray.cur = mzd_copy(NULL, it->space->origin);
-	it->gray.idx = 0;
+	it->str = str;
+	if (use_gray) {
+		it->gray.cur = mzd_copy(NULL, it->space->origin);
+		it->gray.idx = 0;
+	} else {
+		it->state = malloc(space->basis->nrows + 1);
+		memset(it->state, 0, space->basis->nrows + 1);
+	}
 	Py_INCREF(self);
 	PyObject_GC_Track(it);
 	return (PyObject *)it;
@@ -613,10 +632,12 @@ static struct PyModuleDef _internal = {PyModuleDef_HEAD_INIT, "_internal", NULL,
 PyMODINIT_FUNC PyInit__internal(void) {
 	INIT_TYPE(AffineSpace_Type);
 	INIT_TYPE(AffineSpaceIterable_Type);
+	INIT_TYPE(AffineSpaceIterableSlow_Type);
 	PyObject *mod = PyModule_Create(&_internal);
 	if (mod == NULL)
 		return NULL;
 	ADD_TYPE(mod, AffineSpace_Type);
 	ADD_TYPE(mod, AffineSpaceIterable_Type);
+	ADD_TYPE(mod, AffineSpaceIterableSlow_Type);
 	return mod;
 }
