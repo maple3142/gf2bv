@@ -86,6 +86,7 @@ def nlfsr_ex_test(LFSR):
                 # check if the solution does match our guess
                 assert s & 1 == b0
                 assert ((s >> 1) & 1) ^ ((s >> 2) & 1) ^ ((s >> 87) & 1) == b1
+    print()
 
 
 if __name__ == "__main__":

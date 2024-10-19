@@ -17,6 +17,7 @@ def lfsr_test(LFSR, n: int, mask: int):
     for (sol,) in lin.solve_all(zeros):
         print(f"{sol = :#x}")
         assert sol == init_st
+    print()
 
 
 if __name__ == "__main__":
