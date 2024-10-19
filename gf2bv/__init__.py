@@ -112,8 +112,7 @@ class LinearSystem:
         """
         Convert the system of equations to Sage, return a matrix A and a vector b such that Ax = b
         """
-        from sage.all import GF, vector, MatrixSpace
-        from sage.matrix.matrix_mod2_dense import Matrix_mod2_dense
+        from sage.all import GF, vector, MatrixSpace, matrix
 
         F2 = GF(2)
         eqs = self.get_eqs(zeros)
@@ -124,13 +123,15 @@ class LinearSystem:
         affine = vector(F2, affine)
         cols = self._cols
         rows = len(eqs)
-        mat = Matrix_mod2_dense(MatrixSpace(F2, rows, cols))
+        mat = matrix(F2, rows, cols)
+
+        # this is slow, idk how to optimize this
         i = 0
         for v in tqdm(eqs, desc="Converting equations"):
+            bs = to_bits(cols, v)
             for j in range(cols):
-                if v & 1:
+                if bs[j]:
                     mat[i, j] = 1
-                v >>= 1
             i += 1
         return mat, affine
 
