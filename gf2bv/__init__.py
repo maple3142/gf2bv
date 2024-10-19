@@ -83,6 +83,14 @@ class BitVec:
     def concat(self, other: BitVec):
         return BitVec(self._bits + other._bits)
 
+    def evaluate(self, s: int):
+        """
+        Evaluate the BitVec using the given raw solution
+        """
+        r1 = (s << 1) | 1
+        bs = ((b & r1).bit_count() & 1 for b in reversed(self._bits))
+        return int("".join(map(str, bs)), 2)
+
 
 Zeros = Sequence[BitVec | int]
 
@@ -203,24 +211,32 @@ class LinearSystem:
             return
         return self.convert_sol(sol)
 
+    def evaluate(self, bv: BitVec, sol: tuple[int, ...]) -> int:
+        """
+        Evaluate the BitVec using the given solution
+        """
+        s = 0
+        for v, sz in zip(reversed(sol), reversed(self._sizes)):
+            s <<= sz
+            s |= v
+        return bv.evaluate(s)
+
 
 class QuadraticSystem(LinearSystem):
     def __init__(self, sizes: list[int]):
         n = sum(sizes)
         quad_terms = n * (n - 1) // 2
         super().__init__(sizes + [quad_terms])
+        self._quad_sizes = sizes[:]
         self._lin_size = n
         self._const_lin_mask = (1 << (1 + n)) - 1
         self._quad_size = quad_terms
-
-        # for pickle
-        self._quad_init_sizes = sizes
 
     def gens(self):
         return super().gens()[:-1]
 
     def __reduce__(self):
-        return (self.__class__, (self._quad_init_sizes,))
+        return (self.__class__, (self._quad_sizes,))
 
     def _mul_bit_slow(self, a: int, b: int):
         # TODO: find a way to optimize this
@@ -315,3 +331,13 @@ class QuadraticSystem(LinearSystem):
         # we can't use the LinearSystem.solve_one because the returned solution might not pass convert_sol
         for sol in self.solve_all(zeros):
             return sol
+
+    def evaluate(self, bv: BitVec, sol: tuple[int, ...]) -> int:
+        """
+        Evaluate the BitVec using the given solution
+        """
+        s = 0
+        for v, sz in zip(reversed(sol), reversed(self._quad_sizes)):
+            s <<= sz
+            s |= v
+        return bv.evaluate(s)

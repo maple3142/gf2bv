@@ -14,7 +14,7 @@ def nlfsr_ex_test(LFSR):
     N = 2**14
 
     # just to show that quadratic system also works when multiple sizes are given
-    qsys = QuadraticSystem([64, 64])
+    qsys = QuadraticSystem([65, 63])
     lo, hi = qsys.gens()
     x = lo.concat(hi)
 
@@ -54,8 +54,8 @@ def nlfsr_ex_test(LFSR):
 
     # try to solve it
     try:
-        lo, hi = qsys.solve_one(zeros)
-        sol = lo | (hi << 64)
+        sol_tuple = qsys.solve_one(zeros)
+        sol = qsys.evaluate(x, sol_tuple)
         print(f"{sol = :0{n}b}")
         assert sol == init
         print(
@@ -80,12 +80,12 @@ def nlfsr_ex_test(LFSR):
             )
             print(b0, b1, sol_tuple)
             if sol_tuple:
-                lo, hi = sol_tuple
-                s = lo | (hi << 64)
-                assert s == init
+                sol = qsys.evaluate(x, sol_tuple)
+                print(f"{sol = :0{n}b}")
+                assert sol == init
                 # check if the solution does match our guess
-                assert s & 1 == b0
-                assert ((s >> 1) & 1) ^ ((s >> 2) & 1) ^ ((s >> 87) & 1) == b1
+                assert sol & 1 == b0
+                assert ((sol >> 1) & 1) ^ ((sol >> 2) & 1) ^ ((sol >> 87) & 1) == b1
     print()
 
 

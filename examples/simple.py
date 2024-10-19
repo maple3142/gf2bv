@@ -21,6 +21,10 @@ def solve(lin: LinearSystem, zeros: list[BitVec], expected: tuple[int, int, int]
     print(f"{sol = }")
     assert magic(*sol) == expected
 
+    # we also check evaluating the bitvectors at the zeros gives 0
+    for z in zeros:
+        assert lin.evaluate(z, sol) == 0
+
 
 def simple_linear():
     lin = LinearSystem((64, 64))
