@@ -1,4 +1,4 @@
-from typing import Any, Union
+from typing import Any, Union, Optional
 from operator import xor
 from functools import reduce
 from ._internal import m4ri_solve, to_bits, mul_bit_quad, AffineSpace
@@ -91,15 +91,16 @@ class LinearSystem:
     def __init__(self, sizes: list[int]):
         self._sizes = sizes[:]
         self._cols = sum(sizes)
-        self._vars: list[BitVec] = []
 
         # lsb used to represent constant term (affine part), the first one in the basis
         self._basis = [1 << i for i in range(1 + self._cols)]
+
+        _vars: list[BitVec] = []
         i = 1  # lsb used to represent constant term (affine part)
         for size in self._sizes:
-            self._vars.append(BitVec(self._basis[i : i + size]))
+            _vars.append(BitVec(self._basis[i : i + size]))
             i += size
-        self._vars = tuple(self._vars)
+        self._vars = tuple(_vars)
 
     def gens(self):
         return self._vars
@@ -107,7 +108,7 @@ class LinearSystem:
     def __reduce__(self):
         return (self.__class__, (self._sizes,))
 
-    def get_sage_mat(self, zeros: list[BitVec], tqdm=lambda x, desc: x):
+    def get_sage_mat(self, zeros: Zeros, tqdm=lambda x, desc: x):
         """
         Convert the system of equations to Sage, return a matrix A and a vector b such that Ax = b
         """
@@ -163,13 +164,16 @@ class LinearSystem:
         # one solution mode: return the solution directly if it exists, otherwise return None
         return m4ri_solve(eqs, cols, mode)
 
-    def convert_sol(self, s: int) -> Union[tuple[int], None]:
+    def _convert_sol(self, s: int) -> tuple[int, ...]:
         sol = []
         for size in self._sizes:
             sol.append(s & ((1 << size) - 1))
             s >>= size
         assert s == 0, "Invalid solution"
         return tuple(sol)
+
+    def convert_sol(self, s: int) -> Optional[tuple[int, ...]]:
+        return self._convert_sol(s)
 
     def solve_space(self, zeros: Zeros):
         return self.solve_raw(zeros, 1)
@@ -283,14 +287,14 @@ class QuadraticSystem(LinearSystem):
         assert quad == 0, "Invalid quadratic part"
         return True
 
-    def convert_sol(self, s: int) -> tuple[int] | None:
+    def convert_sol(self, s: int) -> Optional[tuple[int, ...]]:
         lin = s & ((1 << self._lin_size) - 1)
         s >>= self._lin_size
         quad = s & ((1 << self._quad_size) - 1)
         s >>= self._quad_size
         assert s == 0, "Invalid solution"
         if self._check_lin_match_quad(lin, quad):
-            return super().convert_sol(lin)[:-1]
+            return super()._convert_sol(lin)[:-1]
 
     def solve_one(self, zeros: Zeros):
         # we can't use the LinearSystem.solve_one because the returned solution might not pass convert_sol
