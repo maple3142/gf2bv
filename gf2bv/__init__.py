@@ -75,7 +75,6 @@ class BitVec:
         return BitVec(self.bits * n)
 
     def concat(self, other: "BitVec"):
-        self._check_sys(other)
         return BitVec(self.bits + other.bits)
 
 

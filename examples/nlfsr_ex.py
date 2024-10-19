@@ -12,8 +12,11 @@ def nlfsr_ex_test(LFSR):
 
     # not 2**14 + 1000 because I want to make it possible to result in DimensionTooLargeError
     N = 2**14
-    qsys = QuadraticSystem([128])
-    (x,) = qsys.gens()
+
+    # just to show that quadratic system also works when multiple sizes are given
+    qsys = QuadraticSystem([64, 64])
+    lo, hi = qsys.gens()
+    x = lo.concat(hi)
 
     # note that for a given LFSR, its system is the same
     # so we can precompute the system and reuse it
@@ -76,8 +79,9 @@ def nlfsr_ex_test(LFSR):
             )
             print(b0, b1, sol_tuple)
             if sol_tuple:
-                assert sol_tuple[0] == init
-                s = sol_tuple[0]
+                lo, hi = sol_tuple
+                s = lo | (hi << 64)
+                assert s == init
                 # check if the solution does match our guess
                 assert s & 1 == b0
                 assert ((s >> 1) & 1) ^ ((s >> 2) & 1) ^ ((s >> 87) & 1) == b1
