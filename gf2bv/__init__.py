@@ -49,15 +49,26 @@ class BitVec:
 
     def __and__(self, mask: int):
         bs = to_bits(len(self._bits), mask)
+        if all(bs):
+            # if all bits are set, it does not change anything
+            return self
         return BitVec([0 if not b else a for a, b in zip(self._bits, bs)])
 
     __rand__ = __and__
 
     def __or__(self, mask: int):
         bs = to_bits(len(self._bits), mask)
+        if all(bs):
+            # if all bits are set, it becomes all ones
+            return BitVec(bs)
         return BitVec([1 if b else a for a, b in zip(self._bits, bs)])
 
     __ror__ = __or__
+
+    def __mod__(self, n: int):
+        if n & (n - 1) != 0:
+            raise ValueError("modulo non-power-of-2 is not a linear operation")
+        return self & (n - 1)
 
     def rotr(self, n: int):
         return BitVec(self._bits[n:] + self._bits[:n])
