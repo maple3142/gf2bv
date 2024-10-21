@@ -1,9 +1,8 @@
 from __future__ import annotations
 from typing import Any, Union, Optional, Literal, TypeVar, TYPE_CHECKING
 from collections.abc import Sequence
-from operator import xor
 from functools import reduce
-from ._internal import m4ri_solve, to_bits, mul_bit_quad, AffineSpace
+from ._internal import m4ri_solve, to_bits, mul_bit_quad, xor_list, AffineSpace
 
 TSolveMode = TypeVar("TSolveMode", Literal[0], Literal[1])
 
@@ -32,11 +31,11 @@ class BitVec:
     def __xor__(self, other: BitVec | int):
         if not isinstance(other, BitVec):
             bs = to_bits(len(self._bits), other)
-            return BitVec(list(map(xor, self._bits, bs)))
+            return BitVec(xor_list(self._bits, bs))
         else:
             if len(self._bits) != len(other._bits):
                 raise ValueError("Cannot mix bitvecs of different lengths")
-        return BitVec(list(map(xor, self._bits, other._bits)))
+        return BitVec(xor_list(self._bits, other._bits))
 
     __rxor__ = __xor__
     __pow__ = __xor__  # alias to __xor__, for convenience in sage

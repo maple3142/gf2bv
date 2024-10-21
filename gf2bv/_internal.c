@@ -592,6 +592,41 @@ PyObject *mul_bit_quad(PyObject *self,
 	return v;
 }
 
+PyObject *xor_list(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
+	PyObject *a, *b;
+	if (nargs != 2) {
+		PyErr_SetString(PyExc_TypeError, "xor_list requires 2 arguments");
+		return NULL;
+	}
+	a = args[0];
+	b = args[1];
+	if (!PyList_Check(a) || !PyList_Check(b)) {
+		PyErr_SetString(PyExc_TypeError, "a and b must be lists");
+		return NULL;
+	}
+	Py_ssize_t len_a = PyList_GET_SIZE(a);
+	Py_ssize_t len_b = PyList_GET_SIZE(b);
+	if (len_a != len_b) {
+		PyErr_SetString(PyExc_ValueError, "The length of a and b is not equal");
+		return NULL;
+	}
+	PyObject *ret = PyList_New(len_a);
+	for (Py_ssize_t i = 0; i < len_a; i++) {
+		PyObject *item_a = PyList_GET_ITEM(a, i);
+		PyObject *item_b = PyList_GET_ITEM(b, i);
+		PyObject *xor_item = PyNumber_Xor(item_a, item_b);
+		if (xor_item == NULL) {
+			Py_DECREF(ret);
+			PyErr_SetString(
+			    PyExc_TypeError,
+			    "Failed to compute xor, list items must be integers");
+			return NULL;
+		}
+		PyList_SetItem(ret, i, xor_item);
+	}
+	return ret;
+}
+
 static PyMethodDef methods[] = {
     {"m4ri_solve", _PyCFunction_CAST(m4ri_solve), METH_FASTCALL,
      "m4ri_solve(equations, cols, mode)\n"
@@ -609,6 +644,11 @@ static PyMethodDef methods[] = {
      "\n"
      "Multiply two linear symbolic bits to a linearized quadratic symbolic "
      "bit"},
+    {"xor_list", _PyCFunction_CAST(xor_list), METH_FASTCALL,
+     "xor_list(a, b)\n"
+     "--\n"
+     "\n"
+     "XOR two lists of integers"},
     {NULL} /* Sentinel */
 };
 
