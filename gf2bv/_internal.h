@@ -28,3 +28,5 @@ typedef struct {
 PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
 PyObject *to_bits(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
 PyObject *mul_bit_quad(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
+PyObject *xor_list(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
+PyObject *list_where(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
