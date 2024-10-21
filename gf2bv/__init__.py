@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Any, Union, Optional, Literal, TypeVar, TYPE_CHECKING
 from collections.abc import Sequence
 from functools import reduce
+from operator import xor
 from ._internal import m4ri_solve, to_bits, mul_bit_quad, xor_list, AffineSpace
 
 TSolveMode = TypeVar("TSolveMode", Literal[0], Literal[1])
