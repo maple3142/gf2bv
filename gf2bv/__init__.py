@@ -3,7 +3,14 @@ from typing import Any, Union, Optional, Literal, TypeVar, TYPE_CHECKING
 from collections.abc import Sequence
 from functools import reduce
 from operator import xor
-from ._internal import m4ri_solve, to_bits, mul_bit_quad, xor_list, AffineSpace
+from ._internal import (
+    m4ri_solve,
+    to_bits,
+    mul_bit_quad,
+    xor_list,
+    list_where,
+    AffineSpace,
+)
 
 TSolveMode = TypeVar("TSolveMode", Literal[0], Literal[1])
 
@@ -52,7 +59,7 @@ class BitVec:
         if all(bs):
             # if all bits are set, it does not change anything
             return self
-        return BitVec([0 if not b else a for a, b in zip(self._bits, bs)])
+        return BitVec(list_where(bs, self._bits, 0))
 
     __rand__ = __and__
 
@@ -61,7 +68,7 @@ class BitVec:
         if all(bs):
             # if all bits are set, it becomes all ones
             return BitVec(bs)
-        return BitVec([1 if b else a for a, b in zip(self._bits, bs)])
+        return BitVec(list_where(bs, 1, self._bits))
 
     __ror__ = __or__
 

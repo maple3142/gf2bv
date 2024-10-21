@@ -629,7 +629,44 @@ PyObject *xor_list(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 			    "Failed to compute xor, list items must be integers");
 			return NULL;
 		}
-		PyList_SetItem(ret, i, xor_item);
+		PyList_SET_ITEM(ret, i, xor_item);
+	}
+	return ret;
+}
+
+PyObject *list_where(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
+	PyObject *cond, *a, *b;
+	if (nargs != 3) {
+		PyErr_SetString(PyExc_TypeError, "list_where requires 3 arguments");
+		return NULL;
+	}
+	cond = args[0];
+	if (!PyList_Check(cond)) {
+		PyErr_SetString(PyExc_TypeError, "cond must be a list");
+		return NULL;
+	}
+	a = args[1];
+	b = args[2];
+	int a_is_list = PyList_Check(a);
+	int b_is_list = PyList_Check(b);
+	Py_ssize_t len_cond = PyList_GET_SIZE(cond);
+	if (a_is_list && PyList_GET_SIZE(a) != len_cond) {
+		PyErr_SetString(PyExc_ValueError,
+		                "The length of a and cond is not equal");
+		return NULL;
+	}
+	if (b_is_list && PyList_GET_SIZE(b) != len_cond) {
+		PyErr_SetString(PyExc_ValueError,
+		                "The length of b and cond is not equal");
+		return NULL;
+	}
+	PyObject *ret = PyList_New(len_cond);
+	for (Py_ssize_t i = 0; i < len_cond; i++) {
+		PyObject *item_cond = PyList_GET_ITEM(cond, i);
+		PyObject *item_a = a_is_list ? PyList_GET_ITEM(a, i) : a;
+		PyObject *item_b = b_is_list ? PyList_GET_ITEM(b, i) : b;
+		PyObject *ret_item = PyObject_IsTrue(item_cond) ? item_a : item_b;
+		PyList_SET_ITEM(ret, i, Py_NewRef(ret_item));
 	}
 	return ret;
 }
@@ -656,6 +693,11 @@ static PyMethodDef methods[] = {
      "--\n"
      "\n"
      "XOR two lists of integers"},
+    {"list_where", _PyCFunction_CAST(list_where), METH_FASTCALL,
+     "list_where(cond, a, b)\n"
+     "--\n"
+     "\n"
+     "Select elements from a or b based on the condition, like np.where"},
     {NULL} /* Sentinel */
 };
 
