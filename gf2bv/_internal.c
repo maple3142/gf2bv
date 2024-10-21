@@ -382,7 +382,7 @@ PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 		PyErr_SetString(PyExc_ValueError, "Invalid mode");
 		return NULL;
 	}
-	Py_ssize_t rows = PyList_Size(linsys_list);
+	Py_ssize_t rows = PyList_GET_SIZE(linsys_list);
 	if (rows < cols) {
 		PyErr_SetString(PyExc_ValueError,
 		                "Number of rows must be greater than or equal to "
@@ -397,7 +397,7 @@ PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 	int B_is_not_zero = 0;
 
 	for (Py_ssize_t r = 0; r < rows; r++) {
-		PyObject *item = PyList_GetItem(linsys_list, r);
+		PyObject *item = PyList_GET_ITEM(linsys_list, r);
 		if (!PyLong_Check(item)) {
 			mzd_free(A);
 			mzd_free(B);
@@ -421,6 +421,9 @@ PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 		                 {});
 	}
 
+	// release GIL because we don't need to call Python API now
+	PyThreadState *_save = PyEval_SaveThread();
+
 	mzp_t *P = mzp_init(A->nrows);
 	mzp_t *Q = mzp_init(A->ncols);
 	rci_t r = _mzd_pluq(A, P, Q, 0);
@@ -435,6 +438,7 @@ PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 				mzd_free(B);
 				mzp_free(P);
 				mzp_free(Q);
+				PyEval_RestoreThread(_save);
 				return Py_None;
 			}
 			// the base solution is stored in B as column vector
@@ -450,6 +454,7 @@ PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 
 	// if we only need one solution, return it
 	if (mode == SOLVE_MODE_SINGLE) {
+		PyEval_RestoreThread(_save);
 		char *str = malloc(cols + 1);
 		str[cols] = '\0';
 		PyObject *ret = mzd_vector_to_pylong(str, sol0);
@@ -479,6 +484,8 @@ PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 		}
 	}
 	// now, only sol0 and tker is valid
+
+	PyEval_RestoreThread(_save);
 
 	// create the affine space object and return it
 	// sol0 and tker are tracked by it
