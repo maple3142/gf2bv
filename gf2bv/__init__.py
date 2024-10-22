@@ -144,7 +144,7 @@ class LinearSystem:
         """
         Convert the system of equations to Sage, return a matrix A and a vector b such that Ax = b
         """
-        from sage.all import GF, vector, MatrixSpace, matrix
+        from sage.all import GF, vector, matrix
 
         F2 = GF(2)
         eqs = self.get_eqs(zeros)
@@ -163,7 +163,7 @@ class LinearSystem:
             bs = to_bits(cols, v)
             for j in range(cols):
                 if bs[j]:
-                    mat[i, j] = 1
+                    mat[i, j] = bs[j]
             i += 1
         return mat, affine
 
