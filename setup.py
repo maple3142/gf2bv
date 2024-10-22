@@ -33,7 +33,7 @@ def download_and_build_m4ri():
         sources=["gf2bv/_internal.c"],
         libraries=["gomp"],
         extra_compile_args=["-O3", "-march=native", "-mtune=native"],
-        library_dirs=[str(workdir)],
+        include_dirs=[str(workdir)],
         extra_objects=[str(libm4ri_a)],
     )
 
