@@ -14,6 +14,12 @@ pip install .
 
 Requires Python 3.11 or later.
 
+You can also set the `GF2BV_BUILD_M4RI` environment variable to automatically build `m4ri` from source:
+
+```bash
+GF2BV_BUILD_M4RI=1 pip install .
+```
+
 ## Usage
 
 Define a linear system using `LinearSystem` and get the symbolic bitvectors with `gens()`, then use the them to build the equations you want to solve. Equations are represented as a list of symbolic bitvectors that evaluate to zero named `zeros` (You can choose other names if you want), then pass them to `solve_one` or `solve_all` to get the solutions.
