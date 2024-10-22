@@ -17,10 +17,12 @@
 // 3.12 and later they are immortal: https://peps.python.org/pep-0683/
 #define PythonTrue Py_True
 #define PythonFalse Py_False
+#define PythonNone Py_None
 #else
 // pre 3.12
 #define PythonTrue Py_NewRef(Py_True)
 #define PythonFalse Py_NewRef(Py_False)
+#define PythonNone Py_NewRef(Py_None)
 #endif
 
 static void nop() {}
@@ -439,7 +441,7 @@ PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 				mzp_free(P);
 				mzp_free(Q);
 				PyEval_RestoreThread(_save);
-				return Py_None;
+				return PythonNone;
 			}
 			// the base solution is stored in B as column vector
 			B->nrows = cols;
@@ -660,15 +662,15 @@ PyObject *list_where(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 		                "The length of b and cond is not equal");
 		return NULL;
 	}
-	PyObject *ret = PyList_New(len_cond);
 	for (Py_ssize_t i = 0; i < len_cond; i++) {
 		PyObject *item_cond = PyList_GET_ITEM(cond, i);
 		PyObject *item_a = a_is_list ? PyList_GET_ITEM(a, i) : a;
 		PyObject *item_b = b_is_list ? PyList_GET_ITEM(b, i) : b;
 		PyObject *ret_item = PyObject_IsTrue(item_cond) ? item_a : item_b;
-		PyList_SET_ITEM(ret, i, Py_NewRef(ret_item));
+		PyList_SET_ITEM(cond, i, Py_NewRef(ret_item));
 	}
-	return ret;
+	Py_IncRef(cond);
+	return cond;
 }
 
 static PyMethodDef methods[] = {
@@ -697,7 +699,9 @@ static PyMethodDef methods[] = {
      "list_where(cond, a, b)\n"
      "--\n"
      "\n"
-     "Select elements from a or b based on the condition, like np.where"},
+     "Select elements from a or b based on the condition like np.where, and "
+     "set it to the cond "
+     "list"},
     {NULL} /* Sentinel */
 };
 
