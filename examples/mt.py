@@ -17,7 +17,7 @@ def timeit(task_name):
 
 def mt19937(bs):
     print("bs:", bs)
-    rand = random.Random()
+    rand = random.Random(3142)
     st = tuple(rand.getstate()[1][:-1])
 
     effective_bs = ((bs - 1) & bs) or bs
