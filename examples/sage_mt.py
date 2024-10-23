@@ -19,7 +19,7 @@ def timeit(task_name):
 
 def sage_test():
     bs = 32
-    rand = random.Random()
+    rand = random.Random(1234)
     st = tuple(rand.getstate()[1][:-1])
 
     effective_bs = ((bs - 1) & bs) or bs
@@ -30,7 +30,9 @@ def sage_test():
 
     rng = MT19937(mt)
     zeros = [rng.getrandbits(bs) ^ o for o in out] + [mt[0] ^ 0x80000000]
-    A, b = lin.get_sage_mat(zeros, tqdm=tqdm)
+    with timeit("get_sage_mat"):
+        A, b = lin.get_sage_mat(zeros, tqdm=tqdm)
+    A.set_immutable()
     print("dim", A.dimensions())
     with timeit("solve_right"):
         s = A.solve_right(b)  # vector

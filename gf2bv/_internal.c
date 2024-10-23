@@ -673,6 +673,63 @@ PyObject *list_where(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 	return cond;
 }
 
+PyObject *eqs_to_sage_mat_helper(PyObject *self,
+                                 PyObject *const *args,
+                                 Py_ssize_t nargs) {
+	// see https://github.com/sagemath/sage/blob/7726cd9e1d01ad32b0f14374c9a4096989c87e14/src/sage/matrix/matrix_mod2_dense.pyx#L1764-L1808
+	PyObject *linsys_list;
+	Py_ssize_t cols;
+	if (nargs != 2) {
+		PyErr_SetString(PyExc_TypeError,
+		                "eqs_to_sage_mat_helper requires 2 arguments");
+		return NULL;
+	}
+	linsys_list = args[0];
+	if (!PyList_Check(linsys_list)) {
+		PyErr_SetString(PyExc_TypeError,
+		                "The first argument equations must be a list");
+		return NULL;
+	}
+	cols = PyLong_AsSsize_t(args[1]);
+	if (cols <= 0) {
+		if (cols == -1 && PyErr_Occurred()) {
+			return NULL;
+		}
+		PyErr_SetString(PyExc_ValueError, "Number of columns must be positive");
+		return NULL;
+	}
+	Py_ssize_t rows = PyList_GET_SIZE(linsys_list);
+	PyObject *affine = PyList_New(rows);
+
+	gdImagePtr im = gdImageCreate(cols, rows);
+	int black = gdImageColorAllocate(im, 0, 0, 0);
+	int white = gdImageColorAllocate(im, 255, 255, 255);
+	gdImageFilledRectangle(im, 0, 0, cols - 1, rows - 1, white);
+	for (Py_ssize_t i = 0; i < rows; i++) {
+		PyLongObject *v = (PyLongObject *)PyList_GET_ITEM(linsys_list, i);
+		Iter_PyLong_Bits(v, cols + 1,
+		                 {
+			                 if (bitcnt == 0) {
+				                 PyList_SET_ITEM(
+				                     affine, i, bit ? PythonTrue : PythonFalse);
+			                 }
+			                 if (bit) {
+				                 gdImageSetPixel(im, bitcnt - 1, i, black);
+			                 }
+		                 },
+		                 {});
+	}
+	int size;
+	char *buf = gdImagePngPtr(im, &size);
+	PyObject *png_bytes = PyBytes_FromStringAndSize(buf, size);
+	gdFree(buf);
+	gdImageDestroy(im);
+	PyObject *ret = PyTuple_Pack(2, png_bytes, affine);
+	Py_DECREF(affine);
+	Py_DECREF(png_bytes);
+	return ret;
+}
+
 static PyMethodDef methods[] = {
     {"m4ri_solve", _PyCFunction_CAST(m4ri_solve), METH_FASTCALL,
      "m4ri_solve(equations, cols, mode)\n"
@@ -702,6 +759,12 @@ static PyMethodDef methods[] = {
      "Select elements from a or b based on the condition like np.where, and "
      "set it to the cond "
      "list"},
+    {"eqs_to_sage_mat_helper", _PyCFunction_CAST(eqs_to_sage_mat_helper),
+     METH_FASTCALL,
+     "eqs_to_sage_mat_helper(equations, cols)\n"
+     "--\n"
+     "\n"
+     "A helper to convert equation into sagemath matrix"},
     {NULL} /* Sentinel */
 };
 

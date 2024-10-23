@@ -9,6 +9,7 @@ from ._internal import (
     mul_bit_quad,
     xor_list,
     list_where,
+    eqs_to_sage_mat_helper,
     AffineSpace,
 )
 
@@ -140,7 +141,7 @@ class LinearSystem:
     def __reduce__(self):
         return (self.__class__, (self._sizes,))
 
-    def get_sage_mat(self, zeros: Zeros, tqdm=lambda x, desc: x):
+    def get_sage_mat_slow(self, zeros: Zeros, tqdm=lambda x, desc: x):
         """
         Convert the system of equations to Sage, return a matrix A and a vector b such that Ax = b
         """
@@ -165,6 +166,25 @@ class LinearSystem:
                 if bs[j]:
                     mat[i, j] = bs[j]
             i += 1
+        return mat, affine
+
+    def get_sage_mat(self, zeros: Zeros, tqdm=lambda x, desc: x):
+        """
+        Convert the system of equations to Sage, return a matrix A and a vector b such that Ax = b
+        """
+        from sage.all import GF, vector, matrix
+        from sage.matrix.matrix_mod2_dense import unpickle_matrix_mod2_dense_v2
+        import struct
+
+        F2 = GF(2)
+        eqs = self.get_eqs(zeros)
+        cols = self._cols
+        rows = len(eqs)
+        buf, affine = eqs_to_sage_mat_helper(eqs, cols)
+        affine = vector(F2, affine)
+        # convert it to signed bytes and deallocate the original buffer
+        buf = struct.unpack(f">{len(buf)}b", buf)  # type: ignore
+        mat = unpickle_matrix_mod2_dense_v2(rows, cols, buf, len(buf), False)
         return mat, affine
 
     def get_eqs(self, zeros: Zeros) -> list[int]:

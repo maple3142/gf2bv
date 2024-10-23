@@ -31,7 +31,7 @@ def download_and_build_m4ri():
     return Extension(
         "gf2bv._internal",
         sources=["gf2bv/_internal.c"],
-        libraries=["gomp"],
+        libraries=["gomp", "gd"],
         extra_compile_args=["-O3", "-march=native", "-mtune=native"],
         include_dirs=[str(workdir)],
         extra_objects=[str(libm4ri_a)],
@@ -44,7 +44,7 @@ else:
     ext = Extension(
         "gf2bv._internal",
         sources=["gf2bv/_internal.c"],
-        libraries=["m4ri"],
+        libraries=["m4ri", "gd"],
         extra_compile_args=["-O3", "-march=native", "-mtune=native"],
     )
 

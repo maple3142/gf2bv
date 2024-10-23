@@ -2,6 +2,7 @@
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <gd.h>
 #include <m4ri/m4ri.h>
 
 typedef struct {
@@ -30,3 +31,6 @@ PyObject *to_bits(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
 PyObject *mul_bit_quad(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
 PyObject *xor_list(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
 PyObject *list_where(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
+PyObject *eqs_to_sage_mat_helper(PyObject *self,
+                                 PyObject *const *args,
+                                 Py_ssize_t nargs);
