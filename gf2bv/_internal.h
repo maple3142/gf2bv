@@ -2,7 +2,6 @@
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
-#include <gd.h>
 #include <m4ri/m4ri.h>
 
 typedef struct {

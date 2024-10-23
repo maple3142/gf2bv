@@ -1,5 +1,7 @@
 #include "_internal.h"
 
+#include <dlfcn.h>
+
 // CPython does not have an public API for this yet
 // ref: https://github.com/aleaxit/gmpy/issues/467
 #if PY_VERSION_HEX >= 0x030C0000
@@ -673,9 +675,41 @@ PyObject *list_where(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 	return cond;
 }
 
+// gd.h functions needed by eqs_to_sage_mat_helper
+void *(*gdImageCreate)(int, int);
+int (*gdImageColorAllocate)(void *, int, int, int);
+void (*gdImageFilledRectangle)(void *, int, int, int, int, int);
+void (*gdImageSetPixel)(void *, int, int, int);
+void *(*gdImagePngPtrEx)(void *, int *, int);
+void (*gdFree)(void *);
+void (*gdImageDestroy)(void *);
+
 PyObject *eqs_to_sage_mat_helper(PyObject *self,
                                  PyObject *const *args,
                                  Py_ssize_t nargs) {
+	if (!gdImageCreate) {
+		// load gd library dynamically
+		void *gd = dlopen("libgd.so", RTLD_LAZY);
+		if (!gd) {
+			PyErr_Format(PyExc_RuntimeError, "Failed to load libgd.so: %s",
+			             dlerror());
+			return NULL;
+		}
+		gdImageCreate = dlsym(gd, "gdImageCreate");
+		gdImageColorAllocate = dlsym(gd, "gdImageColorAllocate");
+		gdImageFilledRectangle = dlsym(gd, "gdImageFilledRectangle");
+		gdImageSetPixel = dlsym(gd, "gdImageSetPixel");
+		gdImagePngPtrEx = dlsym(gd, "gdImagePngPtrEx");
+		gdFree = dlsym(gd, "gdFree");
+		gdImageDestroy = dlsym(gd, "gdImageDestroy");
+		if (!gdImageCreate || !gdImageColorAllocate ||
+		    !gdImageFilledRectangle || !gdImageSetPixel || !gdImagePngPtrEx ||
+		    !gdFree || !gdImageDestroy) {
+			PyErr_SetString(PyExc_RuntimeError,
+			                "Failed to load functions from libgd.so");
+			return NULL;
+		}
+	}
 	// see https://github.com/sagemath/sage/blob/7726cd9e1d01ad32b0f14374c9a4096989c87e14/src/sage/matrix/matrix_mod2_dense.pyx#L1764-L1808
 	PyObject *linsys_list;
 	Py_ssize_t cols;
@@ -701,7 +735,7 @@ PyObject *eqs_to_sage_mat_helper(PyObject *self,
 	Py_ssize_t rows = PyList_GET_SIZE(linsys_list);
 	PyObject *affine = PyList_New(rows);
 
-	gdImagePtr im = gdImageCreate(cols, rows);
+	void *im = gdImageCreate(cols, rows);
 	int black = gdImageColorAllocate(im, 0, 0, 0);
 	int white = gdImageColorAllocate(im, 255, 255, 255);
 	gdImageFilledRectangle(im, 0, 0, cols - 1, rows - 1, white);
