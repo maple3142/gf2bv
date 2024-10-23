@@ -720,7 +720,7 @@ PyObject *eqs_to_sage_mat_helper(PyObject *self,
 		                 {});
 	}
 	int size;
-	char *buf = gdImagePngPtr(im, &size);
+	char *buf = gdImagePngPtrEx(im, &size, 0);
 	PyObject *png_bytes = PyBytes_FromStringAndSize(buf, size);
 	gdFree(buf);
 	gdImageDestroy(im);
