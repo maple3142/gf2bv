@@ -27,6 +27,8 @@
 #define PythonNone Py_NewRef(Py_None)
 #endif
 
+static PyTypeObject GF2Matrix_Type;
+
 static void nop() {}
 
 static inline PyObject *mzd_vector_to_pylong(char *buf, mzd_t *v) {
@@ -764,6 +766,67 @@ PyObject *eqs_to_sage_mat_helper(PyObject *self,
 	return ret;
 }
 
+PyObject *eqs_to_linear_system(PyObject *self,
+                               PyObject *const *args,
+                               Py_ssize_t nargs) {
+	PyObject *linsys_list;
+	Py_ssize_t cols;
+	if (nargs != 2) {
+		PyErr_SetString(PyExc_TypeError,
+		                "eqs_to_linear_system requires 2 arguments");
+		return NULL;
+	}
+	linsys_list = args[0];
+	if (!PyList_Check(linsys_list)) {
+		PyErr_SetString(PyExc_TypeError,
+		                "The first argument equations must be a list");
+		return NULL;
+	}
+	cols = PyLong_AsSsize_t(args[1]);
+	if (cols <= 0) {
+		if (cols == -1 && PyErr_Occurred()) {
+			return NULL;
+		}
+		PyErr_SetString(PyExc_ValueError, "Number of columns must be positive");
+		return NULL;
+	}
+	Py_ssize_t rows = PyList_GET_SIZE(linsys_list);
+
+	mzd_t *A = mzd_init(rows, cols);
+	mzd_t *B = mzd_init(rows, 1);
+
+	for (Py_ssize_t r = 0; r < rows; r++) {
+		PyObject *item = PyList_GET_ITEM(linsys_list, r);
+		if (!PyLong_Check(item)) {
+			mzd_free(A);
+			mzd_free(B);
+			PyErr_SetString(PyExc_TypeError, "List items must be integers");
+			return NULL;
+		}
+		// each item's lsb is the affine term
+		// and higher bits is the linear terms (total: cols)
+		// row in A: [v_1 v_2 ... v_cols]
+		// row in B: [v_0]
+		PyLongObject *v = (PyLongObject *)item;
+		Iter_PyLong_Bits(v, cols + 1,
+		                 {
+			                 if (bitcnt == 0) {
+				                 mzd_write_bit(B, r, 0, bit);
+			                 } else {
+				                 mzd_write_bit(A, r, bitcnt - 1, bit);
+			                 }
+		                 },
+		                 {});
+	}
+	GF2MatrixObject *Aobj = PyObject_GC_New(GF2MatrixObject, &GF2Matrix_Type);
+	Aobj->matrix = A;
+	GF2MatrixObject *Bobj = PyObject_GC_New(GF2MatrixObject, &GF2Matrix_Type);
+	Bobj->matrix = B;
+	PyObject_GC_Track(Aobj);
+	PyObject_GC_Track(Bobj);
+	return PyTuple_Pack(2, (PyObject *)Aobj, (PyObject *)Bobj);
+}
+
 static PyMethodDef methods[] = {
     {"m4ri_solve", _PyCFunction_CAST(m4ri_solve), METH_FASTCALL,
      "m4ri_solve(equations, cols, mode)\n"
@@ -799,11 +862,327 @@ static PyMethodDef methods[] = {
      "--\n"
      "\n"
      "A helper to convert equation into sagemath matrix"},
+    {"eqs_to_linear_system", _PyCFunction_CAST(eqs_to_linear_system),
+     METH_FASTCALL,
+     "eqs_to_linear_system(equations, cols)\n"
+     "--\n"
+     "\n"
+     "Convert equations to a linear system"},
     {NULL} /* Sentinel */
 };
 
 static struct PyModuleDef _internal = {PyModuleDef_HEAD_INIT, "_internal", NULL,
                                        -1, methods};
+
+static PyObject *gf2_matrix_new(PyTypeObject *type,
+                                PyObject *args,
+                                PyObject *kwds) {
+	GF2MatrixObject *self;
+	self = (GF2MatrixObject *)type->tp_alloc(type, 0);
+	if (self != NULL) {
+		self->matrix = NULL;
+	}
+	return (PyObject *)self;
+}
+
+static int gf2_matrix_init(GF2MatrixObject *self,
+                           PyObject *args,
+                           PyObject *kwds) {
+	if (!PyTuple_Check(args)) {
+		PyErr_SetString(PyExc_TypeError, "Arguments must be a tuple");
+		return -1;
+	}
+	if (PyTuple_GET_SIZE(args) != 2) {
+		PyErr_SetString(PyExc_TypeError, "GF2Matrix requires two argument");
+		return -1;
+	}
+	PyObject *ints = PySequence_Fast(PyTuple_GET_ITEM(args, 0),
+	                                 "First argument expected a sequence");
+	PyObject *colsObj = PyTuple_GET_ITEM(args, 1);
+	if (!PyLong_Check(colsObj)) {
+		PyErr_SetString(PyExc_TypeError, "Second argument must be an integer");
+		return -1;
+	}
+	Py_ssize_t cols = PyLong_AsSsize_t(colsObj);
+	if (cols == -1 && PyErr_Occurred()) {
+		Py_DECREF(ints);
+		return -1;
+	}
+	if (cols <= 0) {
+		Py_DECREF(ints);
+		PyErr_SetString(PyExc_ValueError, "Number of columns must be positive");
+		return -1;
+	}
+	Py_ssize_t rows = PySequence_Fast_GET_SIZE(ints);
+	if (rows <= 0) {
+		Py_DECREF(ints);
+		PyErr_SetString(PyExc_ValueError, "Number of rows must be positive");
+		return -1;
+	}
+	self->matrix = mzd_init(rows, cols);
+	if (self->matrix == NULL) {
+		Py_DECREF(ints);
+		PyErr_SetString(PyExc_RuntimeError, "Failed to allocate matrix");
+		return -1;
+	}
+	for (Py_ssize_t i = 0; i < rows; i++) {
+		PyObject *row = PySequence_Fast_GET_ITEM(ints, i);
+		if (!PyLong_Check(row)) {
+			Py_DECREF(ints);
+			PyErr_SetString(PyExc_TypeError,
+			                "Row must be a sequence of integers");
+			return -1;
+		}
+		PyLongObject *row_long = (PyLongObject *)row;
+		Iter_PyLong_Bits(row_long, self->matrix->ncols,
+		                 { mzd_write_bit(self->matrix, i, bitcnt, bit); }, {});
+	}
+	Py_DECREF(ints);
+	return 0;
+}
+
+static void gf2_matrix_dealloc(GF2MatrixObject *self) {
+	PyObject_GC_UnTrack(self);
+	mzd_free(self->matrix);
+	PyObject_GC_Del(self);
+}
+
+PyObject *gf2_matrix_richcompare(GF2MatrixObject *self,
+                                 PyObject *other,
+                                 int op) {
+	if (op != Py_EQ) {
+		Py_RETURN_NOTIMPLEMENTED;
+	}
+	if (self == (GF2MatrixObject *)other) {
+		return PythonTrue;
+	}
+	if (!PyObject_TypeCheck(other, &GF2Matrix_Type)) {
+		return PythonFalse;
+	}
+	GF2MatrixObject *other_matrix = (GF2MatrixObject *)other;
+	if (self->matrix->nrows != other_matrix->matrix->nrows ||
+	    self->matrix->ncols != other_matrix->matrix->ncols) {
+		return PythonFalse;
+	}
+	int cmp = mzd_cmp(self->matrix, other_matrix->matrix);
+	return cmp == 0 ? PythonTrue : PythonFalse;
+}
+
+static int gf2_matrix_get_set_item_parse_key(GF2MatrixObject *self,
+                                             PyObject *key,
+                                             unsigned long *iptr,
+                                             unsigned long *jptr) {
+	if (!PyTuple_Check(key)) {
+		PyErr_SetString(PyExc_TypeError, "Arguments must be a tuple");
+		return 0;
+	}
+	if (PyTuple_GET_SIZE(key) != 2) {
+		PyErr_SetString(PyExc_TypeError, "GF2Matrix requires two argument");
+		return 0;
+	}
+	PyObject *i = PyTuple_GET_ITEM(key, 0);
+	PyObject *j = PyTuple_GET_ITEM(key, 1);
+	if (!PyLong_Check(i) || !PyLong_Check(j)) {
+		PyErr_SetString(PyExc_TypeError, "Index must be an integer");
+		return 0;
+	}
+	if (PyLong_AsLong(i) < 0 || PyLong_AsLong(i) >= self->matrix->nrows) {
+		PyErr_SetString(PyExc_IndexError, "Row index out of range");
+		return 0;
+	}
+	if (PyLong_AsLong(j) < 0 || PyLong_AsLong(j) >= self->matrix->ncols) {
+		PyErr_SetString(PyExc_IndexError, "Column index out of range");
+		return 0;
+	}
+	*iptr = PyLong_AsUnsignedLong(i);
+	*jptr = PyLong_AsUnsignedLong(j);
+	return 1;
+}
+
+static PyObject *gf2_matrix_getitem(GF2MatrixObject *self, PyObject *key) {
+	unsigned long i, j;
+	if (!gf2_matrix_get_set_item_parse_key(self, key, &i, &j)) {
+		return NULL;
+	}
+	return mzd_read_bit(self->matrix, i, j) ? PythonTrue : PythonFalse;
+}
+
+static int *gf2_matrix_setitem(GF2MatrixObject *self,
+                               PyObject *key,
+                               PyObject *value) {
+	unsigned long i, j;
+	if (!gf2_matrix_get_set_item_parse_key(self, key, &i, &j)) {
+		return NULL;
+	}
+	if (value == NULL) {
+		PyErr_SetString(PyExc_TypeError, "Deletion is not supported");
+		return NULL;
+	}
+	if (PyObject_IsTrue(value)) {
+		mzd_write_bit(self->matrix, i, j, 1);
+	} else if (PyObject_Not(value)) {
+		mzd_write_bit(self->matrix, i, j, 0);
+	} else {
+		PyErr_SetString(PyExc_TypeError, "Value must be a boolean");
+		return NULL;
+	}
+	return NULL;
+}
+
+static PyObject *gf2_matrix_get_rows(GF2MatrixObject *self, void *closure) {
+	return PyLong_FromSsize_t(self->matrix->nrows);
+}
+
+static PyObject *gf2_matrix_get_cols(GF2MatrixObject *self, void *closure) {
+	return PyLong_FromSsize_t(self->matrix->ncols);
+}
+
+static inline PyObject *mzd_vector_to_pylong2(char *buf, mzd_t *v, rci_t r) {
+	rci_t len = v->ncols;
+	// buf[len] must be 0
+	for (int c = 0; c < len; c++) {
+		buf[len - 1 - c] = mzd_read_bit(v, r, c) ? '1' : '0';
+	}
+	return PyLong_FromString(buf, NULL, 2);
+}
+
+static PyObject *gf2_matrix_to_list(GF2MatrixObject *self) {
+	PyObject *ret = PyList_New(self->matrix->nrows);
+	char *str = malloc(self->matrix->ncols + 1);
+	str[self->matrix->ncols] = '\0';
+	for (rci_t r = 0; r < self->matrix->nrows; r++) {
+		PyList_SET_ITEM(ret, r, mzd_vector_to_pylong2(str, self->matrix, r));
+	}
+	free(str);
+	return ret;
+}
+
+static PyObject *gf2_matrix_solve_right(GF2MatrixObject *self,
+                                        PyObject *const *args,
+                                        Py_ssize_t nargs) {
+	GF2MatrixObject *other;
+	if (nargs != 1) {
+		PyErr_SetString(PyExc_TypeError, "solve_right requires 1 argument");
+		return NULL;
+	}
+	if (!PyObject_TypeCheck(args[0], &GF2Matrix_Type)) {
+		PyErr_SetString(PyExc_TypeError, "Argument must be a GF2Matrix");
+		return NULL;
+	}
+	other = (GF2MatrixObject *)args[0];
+	if (other->matrix->nrows != self->matrix->nrows) {
+		PyErr_SetString(PyExc_ValueError, "Number of rows must be equal");
+		return NULL;
+	}
+	mzd_t *A = mzd_copy(NULL, self->matrix);
+	mzd_t *B = mzd_copy(NULL, other->matrix);
+	if (!mzd_solve_left(A, B, 0, 1)) {
+		B->nrows = self->matrix->ncols;
+		GF2MatrixObject *ret =
+		    PyObject_GC_New(GF2MatrixObject, &GF2Matrix_Type);
+		ret->matrix = mzd_transpose(NULL, B);
+		PyObject_GC_Track(ret);
+		mzd_free(A);
+		mzd_free(B);
+		return (PyObject *)ret;
+	}
+	mzd_free(A);
+	mzd_free(B);
+	return PythonNone;
+}
+
+static PyObject *gf2_matrix_right_kernel(GF2MatrixObject *self,
+                                         PyObject *const *args,
+                                         Py_ssize_t nargs) {
+	if (nargs != 0) {
+		PyErr_SetString(PyExc_TypeError, "right_kernel requires 0 argument");
+		return NULL;
+	}
+	mzd_t *A = mzd_copy(NULL, self->matrix);
+	mzd_t *ker = mzd_kernel_left_pluq(A, 0);
+	mzd_free(A);
+	if (ker == NULL) {
+		return PythonNone;
+	}
+	GF2MatrixObject *ret = PyObject_GC_New(GF2MatrixObject, &GF2Matrix_Type);
+	ret->matrix = mzd_transpose(NULL, ker);
+	PyObject_GC_Track(ret);
+	mzd_free(ker);
+	return (PyObject *)ret;
+}
+
+static PyObject *gf2_matrix_multiply(GF2MatrixObject *self, PyObject *arg) {
+	GF2MatrixObject *other;
+	if (!PyObject_TypeCheck(arg, &GF2Matrix_Type)) {
+		PyErr_SetString(PyExc_TypeError, "Argument must be a GF2Matrix");
+		return NULL;
+	}
+	other = (GF2MatrixObject *)arg;
+	if (self->matrix->ncols != other->matrix->nrows) {
+		PyErr_SetString(
+		    PyExc_ValueError,
+		    "Number of columns of the first matrix must be equal to "
+		    "the number of rows of the second matrix");
+		return NULL;
+	}
+	mzd_t *result = mzd_mul(NULL, self->matrix, other->matrix, 0);
+	GF2MatrixObject *ret = PyObject_GC_New(GF2MatrixObject, &GF2Matrix_Type);
+	ret->matrix = result;
+	PyObject_GC_Track(ret);
+	return (PyObject *)ret;
+}
+
+static PyMappingMethods gf2_matrix_mapping = {
+    .mp_subscript = (binaryfunc)gf2_matrix_getitem,
+    .mp_ass_subscript = (objobjargproc)gf2_matrix_setitem,
+};
+
+static PyGetSetDef gf2_matrix_getsetdef[] = {
+    {"rows", (getter)gf2_matrix_get_rows, NULL, "Number of rows", NULL},
+    {"cols", (getter)gf2_matrix_get_cols, NULL, "Number of columns", NULL},
+    {NULL} /* Sentinel */
+};
+
+static PyMethodDef gf2_matrix_methods[] = {
+    {"to_list", _PyCFunction_CAST(gf2_matrix_to_list), METH_NOARGS,
+     "to_list(s)\n"
+     "--\n"
+     "\n"
+     "Convert matrix to list"},
+    {"solve_right", _PyCFunction_CAST(gf2_matrix_solve_right), METH_FASTCALL,
+     "solve_right(other)\n"
+     "--\n"
+     "\n"
+     "Solve a linear system"},
+    {"right_kernel", _PyCFunction_CAST(gf2_matrix_right_kernel), METH_FASTCALL,
+     "right_kernel()\n"
+     "--\n"
+     "\n"
+     "Compute right kernel"},
+    {NULL} /* Sentinel */
+};
+
+static PyNumberMethods gf2_matrix_numbers = {
+    .nb_matrix_multiply = (binaryfunc)gf2_matrix_multiply,
+};
+
+static PyTypeObject GF2Matrix_Type = {
+    .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name = "_internal.GF2Matrix",
+    .tp_basicsize = sizeof(AffineSpaceIteratorObject),
+    .tp_itemsize = 0,
+    .tp_new = gf2_matrix_new,
+    .tp_init = (initproc)gf2_matrix_init,
+    .tp_dealloc = (destructor)gf2_matrix_dealloc,
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
+    .tp_traverse = (traverseproc)nop,
+    .tp_clear = (inquiry)nop,
+    .tp_doc = NULL,
+    .tp_as_mapping = &gf2_matrix_mapping,
+    .tp_getset = gf2_matrix_getsetdef,
+    .tp_methods = gf2_matrix_methods,
+    .tp_as_number = &gf2_matrix_numbers,
+    .tp_richcompare = (richcmpfunc)gf2_matrix_richcompare,
+};
 
 #define INIT_TYPE(type)              \
 	do {                             \
@@ -823,11 +1202,13 @@ PyMODINIT_FUNC PyInit__internal(void) {
 	INIT_TYPE(AffineSpace_Type);
 	INIT_TYPE(AffineSpaceIterator_Type);
 	INIT_TYPE(AffineSpaceIteratorSlow_Type);
+	INIT_TYPE(GF2Matrix_Type);
 	PyObject *mod = PyModule_Create(&_internal);
 	if (mod == NULL)
 		return NULL;
 	ADD_TYPE(mod, AffineSpace_Type);
 	ADD_TYPE(mod, AffineSpaceIterator_Type);
 	ADD_TYPE(mod, AffineSpaceIteratorSlow_Type);
+	ADD_TYPE(mod, GF2Matrix_Type);
 	return mod;
 }

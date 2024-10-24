@@ -11,6 +11,8 @@ from ._internal import (
     list_where,
     eqs_to_sage_mat_helper,
     AffineSpace,
+    eqs_to_linear_system,
+    GF2Matrix,
 )
 
 TSolveMode = TypeVar("TSolveMode", Literal[0], Literal[1])
@@ -244,10 +246,20 @@ class LinearSystem:
                 yield ret
 
     def solve_one(self, zeros: Zeros):
-        sol = self.solve_raw(zeros, 0)
+        # sol = self.solve_raw(zeros, 0)
+        # if sol is None:
+        #     return
+        # return self.convert_sol(sol)
+        eqs = self.get_eqs(zeros)
+        cols = self._cols
+        if cols > len(eqs):
+            # pym4ri.solve requires rows >= cols, pad with zeros
+            eqs += [0] * (cols - len(eqs))
+        mat, affine = eqs_to_linear_system(eqs, cols)
+        sol = mat.solve_right(affine)
         if sol is None:
             return
-        return self.convert_sol(sol)
+        return self.convert_sol(sol.to_list()[0])
 
     def evaluate(self, bv: BitVec, sol: tuple[int, ...]) -> int:
         """

@@ -22,6 +22,10 @@ typedef struct {
 	char *str;
 } AffineSpaceIteratorObject;
 
+typedef struct {
+	PyObject_HEAD mzd_t *matrix;
+} GF2MatrixObject;
+
 #define SOLVE_MODE_SINGLE 0
 #define SOLVE_MODE_AFFINE_SPACE 1
 
