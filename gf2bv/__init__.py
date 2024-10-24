@@ -4,7 +4,6 @@ from collections.abc import Sequence
 from functools import reduce
 from operator import xor
 from ._internal import (
-    m4ri_solve,
     to_bits,
     mul_bit_quad,
     xor_list,
@@ -204,7 +203,7 @@ class LinearSystem:
         )
         return list(filter(None, eqs))  # remove literal zeros
 
-    def solve_raw(self, zeros: Zeros, mode: TSolveMode):
+    def get_linear_system(self, zeros: Zeros):
         eqs = self.get_eqs(zeros)
         if 1 in eqs:
             # no solution
@@ -213,9 +212,7 @@ class LinearSystem:
         if cols > len(eqs):
             # pym4ri.solve requires rows >= cols, pad with zeros
             eqs += [0] * (cols - len(eqs))
-        # all mode: may return None if no solution, otherwise return an iterator
-        # one solution mode: return the solution directly if it exists, otherwise return None
-        return m4ri_solve(eqs, cols, mode)
+        return eqs_to_linear_system(eqs, cols)
 
     def _convert_sol(self, s: int) -> tuple[int, ...]:
         sol = []
@@ -229,7 +226,13 @@ class LinearSystem:
         return self._convert_sol(s)
 
     def solve_space(self, zeros: Zeros) -> Optional[AffineSpace]:
-        return self.solve_raw(zeros, 1)
+        mat, affine = self.get_linear_system(zeros)
+        if mat is None:
+            return
+        origin = mat.solve_right(affine)
+        if origin is None:
+            return
+        return AffineSpace(origin, mat.right_kernel())
 
     def solve_all(self, zeros: Zeros, max_dimension: int = 16):
         space = self.solve_space(zeros)
@@ -246,16 +249,7 @@ class LinearSystem:
                 yield ret
 
     def solve_one(self, zeros: Zeros):
-        # sol = self.solve_raw(zeros, 0)
-        # if sol is None:
-        #     return
-        # return self.convert_sol(sol)
-        eqs = self.get_eqs(zeros)
-        cols = self._cols
-        if cols > len(eqs):
-            # pym4ri.solve requires rows >= cols, pad with zeros
-            eqs += [0] * (cols - len(eqs))
-        mat, affine = eqs_to_linear_system(eqs, cols)
+        mat, affine = self.get_linear_system(zeros)
         sol = mat.solve_right(affine)
         if sol is None:
             return

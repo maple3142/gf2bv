@@ -180,6 +180,64 @@ static PyTypeObject AffineSpaceIteratorSlow_Type = {
 
 #pragma region AffineSpace
 
+static PyObject *affinespace_new(PyTypeObject *type,
+                                 PyObject *args,
+                                 PyObject *kwds) {
+	AffineSpaceObject *self = (AffineSpaceObject *)type->tp_alloc(type, 0);
+	if (self == NULL) {
+		return NULL;
+	}
+	self->origin = NULL;
+	self->basis = NULL;
+	return (PyObject *)self;
+}
+
+static int affinespace_init(AffineSpaceObject *self,
+                            PyObject *args,
+                            PyObject *kwds) {
+	if (!PyTuple_Check(args)) {
+		PyErr_SetString(PyExc_TypeError, "Arguments must be a tuple");
+		return -1;
+	}
+	if (PyTuple_GET_SIZE(args) != 2) {
+		PyErr_SetString(PyExc_TypeError, "AffineSpace requires two argument");
+		return -1;
+	}
+	PyObject *arg0 = PyTuple_GET_ITEM(args, 0);
+	PyObject *arg1 = PyTuple_GET_ITEM(args, 1);
+	if (!PyObject_TypeCheck(arg0, &GF2Matrix_Type)) {
+		PyErr_SetString(PyExc_TypeError, "First argument must be a GF2Matrix");
+		return -1;
+	}
+	int has_kernel = 1;
+	if (!PyObject_TypeCheck(arg1, &GF2Matrix_Type) && !Py_IsNone(arg1)) {
+		PyErr_SetString(PyExc_TypeError,
+		                "Second argument must be a GF2Matrix or None");
+		return -1;
+	}
+	if (Py_IsNone(arg1)) {
+		has_kernel = 0;
+	}
+	GF2MatrixObject *origin = (GF2MatrixObject *)arg0;
+	GF2MatrixObject *basis = (GF2MatrixObject *)arg1;
+	if (origin->matrix->nrows != 1) {
+		PyErr_SetString(PyExc_ValueError, "Origin must be a row vector");
+		return -1;
+	}
+	if (has_kernel && (origin->matrix->ncols != basis->matrix->ncols)) {
+		PyErr_SetString(
+		    PyExc_ValueError,
+		    "Origin and basis must have the same number of columns");
+		return -1;
+	}
+	mzd_t *origin_copy = mzd_copy(NULL, origin->matrix);
+	mzd_t *basis_copy = has_kernel ? mzd_copy(NULL, basis->matrix)
+	                               : mzd_init(0, origin->matrix->ncols);
+	self->origin = origin_copy;
+	self->basis = basis_copy;
+	return 0;
+}
+
 static PyObject *affinespace_iter(PyObject *self) {
 	AffineSpaceObject *space = (AffineSpaceObject *)self;
 	char *str = malloc(space->origin->ncols + 1);
@@ -286,8 +344,10 @@ static PyMethodDef AffineSpace_methods[] = {
 
 static void affinespace_dealloc(AffineSpaceObject *self) {
 	PyObject_GC_UnTrack(self);
-	mzd_free(self->origin);
-	mzd_free(self->basis);
+	if (self->origin)
+		mzd_free(self->origin);
+	if (self->basis)
+		mzd_free(self->basis);
 	PyObject_GC_Del(self);
 }
 
@@ -295,6 +355,8 @@ static PyTypeObject AffineSpace_Type = {
     .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name = "_internal.AffineSpace",
     .tp_basicsize = sizeof(AffineSpaceObject),
     .tp_itemsize = 0,
+    .tp_new = affinespace_new,
+    .tp_init = (initproc)affinespace_init,
     .tp_dealloc = (destructor)affinespace_dealloc,
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
     .tp_traverse = (traverseproc)nop,  // no Python objects to traverse
@@ -356,151 +418,6 @@ mzd_t *_mzd_kernel_left_pluq(mzd_t *A,
 	// __M4RI_DD_MZD(A);
 	// __M4RI_DD_MZD(R);
 	return R;
-}
-
-PyObject *m4ri_solve(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
-	PyObject *linsys_list;
-	Py_ssize_t cols;
-	long mode = 0;
-	if (nargs != 3) {
-		PyErr_SetString(PyExc_TypeError, "m4ri_solve requires 3 arguments");
-		return NULL;
-	}
-	linsys_list = args[0];
-	if (!PyList_Check(linsys_list)) {
-		PyErr_SetString(PyExc_TypeError,
-		                "The first argument equations must be a list");
-		return NULL;
-	}
-	cols = PyLong_AsSsize_t(args[1]);
-	if (cols <= 0) {
-		if (cols == -1 && PyErr_Occurred()) {
-			return NULL;
-		}
-		PyErr_SetString(PyExc_ValueError, "Number of columns must be positive");
-		return NULL;
-	}
-	mode = PyLong_AsLong(args[2]);
-	if (mode == -1 && PyErr_Occurred()) {
-		return NULL;
-	}
-	if (mode != SOLVE_MODE_SINGLE && mode != SOLVE_MODE_AFFINE_SPACE) {
-		PyErr_SetString(PyExc_ValueError, "Invalid mode");
-		return NULL;
-	}
-	Py_ssize_t rows = PyList_GET_SIZE(linsys_list);
-	if (rows < cols) {
-		PyErr_SetString(PyExc_ValueError,
-		                "Number of rows must be greater than or equal to "
-		                "number of columns, try pad with zeros.");
-		return NULL;
-	}
-
-	// Ax = B
-	mzd_t *A = mzd_init(rows, cols);
-	mzd_t *B = mzd_init(rows, 1);
-
-	int B_is_not_zero = 0;
-
-	for (Py_ssize_t r = 0; r < rows; r++) {
-		PyObject *item = PyList_GET_ITEM(linsys_list, r);
-		if (!PyLong_Check(item)) {
-			mzd_free(A);
-			mzd_free(B);
-			PyErr_SetString(PyExc_TypeError, "List items must be integers");
-			return NULL;
-		}
-		// each item's lsb is the affine term
-		// and higher bits is the linear terms (total: cols)
-		// row in A: [v_1 v_2 ... v_cols]
-		// row in B: [v_0]
-		PyLongObject *v = (PyLongObject *)item;
-		Iter_PyLong_Bits(v, cols + 1,
-		                 {
-			                 if (bitcnt == 0) {
-				                 mzd_write_bit(B, r, 0, bit);
-				                 B_is_not_zero |= bit;
-			                 } else {
-				                 mzd_write_bit(A, r, bitcnt - 1, bit);
-			                 }
-		                 },
-		                 {});
-	}
-
-	// release GIL because we don't need to call Python API now
-	PyThreadState *_save = PyEval_SaveThread();
-
-	mzp_t *P = mzp_init(A->nrows);
-	mzp_t *Q = mzp_init(A->ncols);
-	rci_t r = _mzd_pluq(A, P, Q, 0);
-
-	// first, find the base solution
-	mzd_t *sol0;
-	{
-		if (B_is_not_zero) {
-			// this is actually solve_right in Sage...
-			if (_mzd_pluq_solve_left(A, r, P, Q, B, 0, 1) != 0) {
-				mzd_free(A);
-				mzd_free(B);
-				mzp_free(P);
-				mzp_free(Q);
-				PyEval_RestoreThread(_save);
-				return PythonNone;
-			}
-			// the base solution is stored in B as column vector
-			B->nrows = cols;
-			sol0 = mzd_transpose(0, B);
-		} else {
-			// the trivial solution
-			sol0 = mzd_init(1, cols);
-		}
-	}
-	mzd_free(B);
-	// A, sol0, P, Q is valid
-
-	// if we only need one solution, return it
-	if (mode == SOLVE_MODE_SINGLE) {
-		PyEval_RestoreThread(_save);
-		char *str = malloc(cols + 1);
-		str[cols] = '\0';
-		PyObject *ret = mzd_vector_to_pylong(str, sol0);
-		free(str);
-
-		mzd_free(A);
-		mzd_free(sol0);
-		mzp_free(P);
-		mzp_free(Q);
-		return ret;
-	}
-
-	// compute the basis
-	mzd_t *tker;
-	{
-		// and this is right_kernel_matrix
-		// mzd_t *ker = mzd_kernel_left_pluq(A, 0);
-		mzd_t *ker = _mzd_kernel_left_pluq(A, r, P, Q, 0);
-		mzd_free(A);
-		mzp_free(P);
-		mzp_free(Q);
-		if (ker == NULL) {
-			tker = mzd_init(0, 0);
-		} else {
-			tker = mzd_transpose(0, ker);
-			mzd_free(ker);
-		}
-	}
-	// now, only sol0 and tker is valid
-
-	PyEval_RestoreThread(_save);
-
-	// create the affine space object and return it
-	// sol0 and tker are tracked by it
-	AffineSpaceObject *it =
-	    PyObject_GC_New(AffineSpaceObject, &AffineSpace_Type);
-	it->origin = sol0;
-	it->basis = tker;
-	PyObject_GC_Track(it);
-	return (PyObject *)it;
 }
 
 PyObject *to_bits(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
@@ -828,11 +745,6 @@ PyObject *eqs_to_linear_system(PyObject *self,
 }
 
 static PyMethodDef methods[] = {
-    {"m4ri_solve", _PyCFunction_CAST(m4ri_solve), METH_FASTCALL,
-     "m4ri_solve(equations, cols, mode)\n"
-     "--\n"
-     "\n"
-     "Solve a linear system over GF(2) with M4RI"},
     {"to_bits", _PyCFunction_CAST(to_bits), METH_FASTCALL,
      "to_bits(n, number)\n"
      "--\n"
@@ -898,6 +810,9 @@ static int gf2_matrix_init(GF2MatrixObject *self,
 	}
 	PyObject *ints = PySequence_Fast(PyTuple_GET_ITEM(args, 0),
 	                                 "First argument expected a sequence");
+	if (ints == NULL) {
+		return -1;
+	}
 	PyObject *colsObj = PyTuple_GET_ITEM(args, 1);
 	if (!PyLong_Check(colsObj)) {
 		PyErr_SetString(PyExc_TypeError, "Second argument must be an integer");
@@ -943,7 +858,8 @@ static int gf2_matrix_init(GF2MatrixObject *self,
 
 static void gf2_matrix_dealloc(GF2MatrixObject *self) {
 	PyObject_GC_UnTrack(self);
-	mzd_free(self->matrix);
+	if (self->matrix)
+		mzd_free(self->matrix);
 	PyObject_GC_Del(self);
 }
 
