@@ -7,8 +7,8 @@ from ._internal import (
     m4ri_solve,
     to_bits,
     mul_bit_quad,
-    xor_list,
-    list_where,
+    xor_tuple,
+    tuple_where,
     eqs_to_sage_mat_helper,
     AffineSpace,
 )
@@ -19,13 +19,10 @@ TSolveMode = TypeVar("TSolveMode", Literal[0], Literal[1])
 class BitVec:
     __slots__ = ("_bits",)
 
-    def __init__(self, bits: list[int]):
+    def __init__(self, bits: tuple[int, ...]):
         # this represent the symbolic bits of the BitVec
         # in little-endian order (lsb first)
         self._bits = bits
-
-    def __copy__(self):
-        return BitVec(self._bits[:])
 
     def __len__(self):
         return len(self._bits)
@@ -34,33 +31,33 @@ class BitVec:
         if isinstance(key, slice):
             return BitVec(self._bits[key])
         return BitVec(
-            [self._bits[key]]
+            (self._bits[key],)
         )  # still wrap it to prevent misuse like bv[0] ^ bv
 
     def __xor__(self, other: BitVec | int):
         if not isinstance(other, BitVec):
             bs = to_bits(len(self._bits), other)
-            return BitVec(xor_list(self._bits, bs))
+            return BitVec(xor_tuple(self._bits, bs))
         else:
             if len(self._bits) != len(other._bits):
                 raise ValueError("Cannot mix bitvecs of different lengths")
-        return BitVec(xor_list(self._bits, other._bits))
+        return BitVec(xor_tuple(self._bits, other._bits))
 
     __rxor__ = __xor__
     __pow__ = __xor__  # alias to __xor__, for convenience in sage
 
     def __rshift__(self, n: int):
-        return BitVec(self._bits[n:] + [0] * n)
+        return BitVec(self._bits[n:] + (0,) * n)
 
     def __lshift__(self, n: int):
-        return BitVec([0] * n + self._bits[:-n])
+        return BitVec((0,) * n + self._bits[:-n])
 
     def __and__(self, mask: int):
         bs = to_bits(len(self._bits), mask)
         if all(bs):
             # if all bits are set, it does not change anything
             return self
-        return BitVec(list_where(bs, self._bits, 0))
+        return BitVec(tuple_where(bs, self._bits, 0))
 
     __rand__ = __and__
 
@@ -69,7 +66,7 @@ class BitVec:
         if all(bs):
             # if all bits are set, it becomes all ones
             return BitVec(bs)
-        return BitVec(list_where(bs, 1, self._bits))
+        return BitVec(tuple_where(bs, 1, self._bits))
 
     __ror__ = __or__
 
@@ -85,16 +82,16 @@ class BitVec:
         return BitVec(self._bits[-n:] + self._bits[:-n])
 
     def sum(self):
-        return BitVec([reduce(xor, self._bits)])
+        return BitVec((reduce(xor, self._bits),))
 
     def zeroext(self, n: int):
-        return BitVec(self._bits + [0] * n)
+        return BitVec(self._bits + (0,) * n)
 
     def signext(self, n: int):
-        return BitVec(self._bits + [self._bits[-1]] * n)
+        return BitVec(self._bits + (self._bits[-1],) * n)
 
     def broadcast(self, i: int, n: int):
-        return BitVec([self._bits[i]] * n)
+        return BitVec((self._bits[i],) * n)
 
     def dup(self, n: int):
         return BitVec(self._bits * n)
@@ -131,7 +128,7 @@ class LinearSystem:
         _vars: list[BitVec] = []
         i = 1  # lsb used to represent constant term (affine part)
         for size in self._sizes:
-            _vars.append(BitVec(self._basis[i : i + size]))
+            _vars.append(BitVec(tuple(self._basis[i : i + size])))
             i += size
         self._vars = tuple(_vars)
 
@@ -313,7 +310,7 @@ class QuadraticSystem(LinearSystem):
     def mul_bit(self, a: BitVec, b: BitVec) -> BitVec:
         if len(a) != 1 or len(b) != 1:
             raise ValueError("The inputs should be single bits")
-        return BitVec([self._mul_bit(a._bits[0], b._bits[0])])
+        return BitVec((self._mul_bit(a._bits[0], b._bits[0]),))
 
     def _bit_assert(self, a: int, v: int):
         # this is to assert `a` bit is exactly equal to `v`

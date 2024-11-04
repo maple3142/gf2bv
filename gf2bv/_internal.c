@@ -521,12 +521,12 @@ PyObject *to_bits(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 		PyErr_SetString(PyExc_TypeError, "a must be an integer");
 		return NULL;
 	}
-	PyObject *list = PyList_New(n);
+	PyObject *list = PyTuple_New(n);
 	PyLongObject *a_long = (PyLongObject *)a;
 	Iter_PyLong_Bits(
 	    a_long, n,
-	    { PyList_SetItem(list, bitcnt, bit ? PythonTrue : PythonFalse); },
-	    { PyList_SetItem(list, bitcnt, PythonFalse); });
+	    { PyTuple_SetItem(list, bitcnt, bit ? PythonTrue : PythonFalse); },
+	    { PyTuple_SetItem(list, bitcnt, PythonFalse); });
 	return list;
 }
 
@@ -603,28 +603,28 @@ PyObject *mul_bit_quad(PyObject *self,
 	return v;
 }
 
-PyObject *xor_list(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
+PyObject *xor_tuple(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 	PyObject *a, *b;
 	if (nargs != 2) {
-		PyErr_SetString(PyExc_TypeError, "xor_list requires 2 arguments");
+		PyErr_SetString(PyExc_TypeError, "xor_tuple requires 2 arguments");
 		return NULL;
 	}
 	a = args[0];
 	b = args[1];
-	if (!PyList_Check(a) || !PyList_Check(b)) {
-		PyErr_SetString(PyExc_TypeError, "a and b must be lists");
+	if (!PyTuple_Check(a) || !PyTuple_Check(b)) {
+		PyErr_SetString(PyExc_TypeError, "a and b must be tuples");
 		return NULL;
 	}
-	Py_ssize_t len_a = PyList_GET_SIZE(a);
-	Py_ssize_t len_b = PyList_GET_SIZE(b);
+	Py_ssize_t len_a = PyTuple_GET_SIZE(a);
+	Py_ssize_t len_b = PyTuple_GET_SIZE(b);
 	if (len_a != len_b) {
 		PyErr_SetString(PyExc_ValueError, "The length of a and b is not equal");
 		return NULL;
 	}
-	PyObject *ret = PyList_New(len_a);
+	PyObject *ret = PyTuple_New(len_a);
 	for (Py_ssize_t i = 0; i < len_a; i++) {
-		PyObject *item_a = PyList_GET_ITEM(a, i);
-		PyObject *item_b = PyList_GET_ITEM(b, i);
+		PyObject *item_a = PyTuple_GET_ITEM(a, i);
+		PyObject *item_b = PyTuple_GET_ITEM(b, i);
 		PyObject *xor_item = PyNumber_Xor(item_a, item_b);
 		if (xor_item == NULL) {
 			Py_DECREF(ret);
@@ -633,43 +633,43 @@ PyObject *xor_list(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 			    "Failed to compute xor, list items must be integers");
 			return NULL;
 		}
-		PyList_SET_ITEM(ret, i, xor_item);
+		PyTuple_SET_ITEM(ret, i, xor_item);
 	}
 	return ret;
 }
 
-PyObject *list_where(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
+PyObject *tuple_where(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
 	PyObject *cond, *a, *b;
 	if (nargs != 3) {
-		PyErr_SetString(PyExc_TypeError, "list_where requires 3 arguments");
+		PyErr_SetString(PyExc_TypeError, "tuple_where requires 3 arguments");
 		return NULL;
 	}
 	cond = args[0];
-	if (!PyList_Check(cond)) {
+	if (!PyTuple_Check(cond)) {
 		PyErr_SetString(PyExc_TypeError, "cond must be a list");
 		return NULL;
 	}
 	a = args[1];
 	b = args[2];
-	int a_is_list = PyList_Check(a);
-	int b_is_list = PyList_Check(b);
-	Py_ssize_t len_cond = PyList_GET_SIZE(cond);
-	if (a_is_list && PyList_GET_SIZE(a) != len_cond) {
+	int a_is_list = PyTuple_Check(a);
+	int b_is_list = PyTuple_Check(b);
+	Py_ssize_t len_cond = PyTuple_GET_SIZE(cond);
+	if (a_is_list && PyTuple_GET_SIZE(a) != len_cond) {
 		PyErr_SetString(PyExc_ValueError,
 		                "The length of a and cond is not equal");
 		return NULL;
 	}
-	if (b_is_list && PyList_GET_SIZE(b) != len_cond) {
+	if (b_is_list && PyTuple_GET_SIZE(b) != len_cond) {
 		PyErr_SetString(PyExc_ValueError,
 		                "The length of b and cond is not equal");
 		return NULL;
 	}
 	for (Py_ssize_t i = 0; i < len_cond; i++) {
-		PyObject *item_cond = PyList_GET_ITEM(cond, i);
-		PyObject *item_a = a_is_list ? PyList_GET_ITEM(a, i) : a;
-		PyObject *item_b = b_is_list ? PyList_GET_ITEM(b, i) : b;
+		PyObject *item_cond = PyTuple_GET_ITEM(cond, i);
+		PyObject *item_a = a_is_list ? PyTuple_GET_ITEM(a, i) : a;
+		PyObject *item_b = b_is_list ? PyTuple_GET_ITEM(b, i) : b;
 		PyObject *ret_item = PyObject_IsTrue(item_cond) ? item_a : item_b;
-		PyList_SET_ITEM(cond, i, Py_NewRef(ret_item));
+		PyTuple_SET_ITEM(cond, i, Py_NewRef(ret_item));
 	}
 	Py_IncRef(cond);
 	return cond;
@@ -774,25 +774,25 @@ static PyMethodDef methods[] = {
      "to_bits(n, number)\n"
      "--\n"
      "\n"
-     "Convert an integer to a list of bits (bool values)"},
+     "Convert an integer to a tuple of bits (bool values)"},
     {"mul_bit_quad", _PyCFunction_CAST(mul_bit_quad), METH_FASTCALL,
      "mul_bit_quad(n, a, b, v, basis)\n"
      "--\n"
      "\n"
      "Multiply two linear symbolic bits to a linearized quadratic symbolic "
      "bit"},
-    {"xor_list", _PyCFunction_CAST(xor_list), METH_FASTCALL,
-     "xor_list(a, b)\n"
+    {"xor_tuple", _PyCFunction_CAST(xor_tuple), METH_FASTCALL,
+     "xor_tuple(a, b)\n"
      "--\n"
      "\n"
-     "XOR two lists of integers"},
-    {"list_where", _PyCFunction_CAST(list_where), METH_FASTCALL,
-     "list_where(cond, a, b)\n"
+     "XOR two tuple of integers"},
+    {"tuple_where", _PyCFunction_CAST(tuple_where), METH_FASTCALL,
+     "tuple_where(cond, a, b)\n"
      "--\n"
      "\n"
      "Select elements from a or b based on the condition like np.where, and "
      "set it to the cond "
-     "list"},
+     "tuple"},
     {"eqs_to_sage_mat_helper", _PyCFunction_CAST(eqs_to_sage_mat_helper),
      METH_FASTCALL,
      "eqs_to_sage_mat_helper(equations, cols)\n"
