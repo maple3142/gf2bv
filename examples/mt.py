@@ -15,13 +15,14 @@ def timeit(task_name):
         print(f"{task_name} took {end - start:.2f} seconds")
 
 
-def mt19937(bs):
+def mt19937(bs, samples=None):
     print("bs:", bs)
     rand = random.Random(3142)
     st = tuple(rand.getstate()[1][:-1])
 
     effective_bs = ((bs - 1) & bs) or bs
-    out = [rand.getrandbits(bs) for _ in range(624 * 32 // effective_bs)]
+    samples = 624 * 32 // effective_bs if samples is None else samples
+    out = [rand.getrandbits(bs) for _ in range(samples)]
 
     lin = LinearSystem([32] * 624)
     mt = lin.gens()
@@ -39,6 +40,8 @@ def mt19937(bs):
     pyrand = rng.to_python_random()
     assert all(rng.getrandbits(bs) == o for o in out)
     assert all(pyrand.getrandbits(bs) == o for o in out)
+    for _ in range(100):
+        assert rng.getrandbits(bs) == rand.getrandbits(bs)
 
 
 if __name__ == "__main__":
@@ -46,3 +49,5 @@ if __name__ == "__main__":
     mt19937(17)
     mt19937(9)
     mt19937(1)
+    mt19937(1337, 19968 // 1337 + 10)
+    mt19937(137, 19968 // 137 + 60)

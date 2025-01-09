@@ -52,6 +52,9 @@ class BitVec:
     def __lshift__(self, n: int):
         return BitVec((0,) * n + self._bits[:-n])
 
+    def lshift_ext(self, n: int):
+        return BitVec((0,) * n + self._bits)
+
     def __and__(self, mask: int):
         bs = to_bits(len(self._bits), mask)
         if all(bs):
@@ -61,7 +64,24 @@ class BitVec:
 
     __rand__ = __and__
 
-    def __or__(self, mask: int):
+    def __or__(self, mask: BitVec | int):
+        if isinstance(mask, BitVec):
+            if len(self._bits) > len(mask._bits):
+                self, mask = mask, self
+            ar = [0] * len(mask._bits)
+            for i in range(len(self._bits)):
+                if self._bits[i] not in (0, 1) and mask._bits[i] not in (0, 1):
+                    raise ValueError(
+                        "Cannot compute logical or using bitvecs with non-zero bits"
+                    )
+                if self._bits[i] == 1 or mask._bits[i] == 1:
+                    ar[i] = 1
+                elif self._bits[i] == 0:
+                    ar[i] = mask._bits[i]
+                elif mask._bits[i] == 0:
+                    ar[i] = self._bits[i]
+            ar[len(self._bits) :] = mask._bits[len(self._bits) :]
+            return BitVec(tuple(ar))
         bs = to_bits(len(self._bits), mask)
         if all(bs):
             # if all bits are set, it becomes all ones

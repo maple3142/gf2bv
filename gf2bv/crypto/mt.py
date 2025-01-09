@@ -52,20 +52,29 @@ class MersenneTwister:
         self.mti += 1
         return self.temper(y)
 
+    def _getrandbits_word(self, k):
+        r = self()
+        if isinstance(r, BitVec):
+            return r[self.w - k :]
+        return r >> (self.w - k)
+
     def getrandbits(self, k=None):
         """Uses the CPython's implementation of random.getrandbits()"""
         if k is None:
             k = self.w
-        if k == 0:
-            return 0
+        if k < 0:
+            raise ValueError("number of bits cannot be negative")
         if k <= self.w:
-            return self.__call__() >> (self.w - k)
+            return self._getrandbits_word(k)
+        words = (k - 1) // self.w + 1
         x = 0
-        for i in range(0, k, self.w):
-            r = self.__call__()
-            if i + self.w > k:
-                r = r >> (self.w - (k - i))
-            x |= r << i
+        for i in range(words):
+            r = self._getrandbits_word(min(k, self.w))
+            if isinstance(r, BitVec):
+                x |= r.lshift_ext(self.w * i)
+            else:
+                x |= r << (self.w * i)
+            k -= self.w
         return x
 
 
