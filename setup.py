@@ -5,14 +5,14 @@ from pathlib import Path
 
 
 def download_and_build_m4ri():
-    release = "20240729"
-    workdir = Path(f"m4ri-release-{release}")
+    release = "20250128"
+    workdir = Path(f"m4ri-{release}")
     libm4ri_a = workdir / ".libs" / "libm4ri.a"
     if libm4ri_a.exists():
         print(f"Using cached m4ri {release}")
     else:
         with urlopen(
-            f"https://github.com/malb/m4ri/archive/refs/tags/release-{release}.tar.gz"
+            f"https://github.com/malb/m4ri/archive/refs/tags/{release}.tar.gz"
         ) as source:
             with tarfile.open(fileobj=source, mode="r|gz") as tar:
                 tar.extractall()
