@@ -47,9 +47,13 @@ class BitVec:
     __pow__ = __xor__  # alias to __xor__, for convenience in sage
 
     def __rshift__(self, n: int):
+        if n == 0:
+            return self
         return BitVec(self._bits[n:] + (0,) * n)
 
     def __lshift__(self, n: int):
+        if n == 0:
+            return self
         return BitVec((0,) * n + self._bits[:-n])
 
     def lshift_ext(self, n: int):
