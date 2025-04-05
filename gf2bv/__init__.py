@@ -162,7 +162,7 @@ class LinearSystem:
     def __reduce__(self):
         return (self.__class__, (self._sizes,))
 
-    def get_sage_mat_slow(self, zeros: Zeros, tqdm=lambda x, desc: x):
+    def get_sage_mat_slow(self, zeros: Zeros, *, tqdm=lambda x, desc: x):
         """
         Convert the system of equations to Sage, return a matrix A and a vector b such that Ax = b
         """
@@ -189,7 +189,7 @@ class LinearSystem:
             i += 1
         return mat, affine
 
-    def get_sage_mat(self, zeros: Zeros, tqdm=lambda x, desc: x):
+    def get_sage_mat(self, zeros: Zeros):
         """
         Convert the system of equations to Sage, return a matrix A and a vector b such that Ax = b
         """
@@ -223,17 +223,17 @@ class LinearSystem:
         )
         return list(filter(None, eqs))  # remove literal zeros
 
-    def solve_raw(self, zeros: Zeros, mode: TSolveMode):
+    def _solve_internal(self, zeros: Zeros, mode: TSolveMode):
         eqs = self.get_eqs(zeros)
         if 1 in eqs:
             # no solution
             return
         cols = self._cols
         if cols > len(eqs):
-            # pym4ri.solve requires rows >= cols, pad with zeros
+            # m4ri_solve requires rows >= cols, pad with zeros
             eqs += [0] * (cols - len(eqs))
-        # all mode: may return None if no solution, otherwise return an iterator
-        # one solution mode: return the solution directly if it exists, otherwise return None
+        # all mode (mode == 1): may return None if no solution, otherwise return an iterator
+        # one solution mode (mode == 0): return the solution directly if it exists, otherwise return None
         return m4ri_solve(eqs, cols, mode)
 
     def _convert_sol(self, s: int) -> tuple[int, ...]:
@@ -247,11 +247,14 @@ class LinearSystem:
     def convert_sol(self, s: int) -> Optional[tuple[int, ...]]:
         return self._convert_sol(s)
 
-    def solve_space(self, zeros: Zeros) -> Optional[AffineSpace]:
-        return self.solve_raw(zeros, 1)
+    def solve_raw_one(self, zeros: Zeros) -> Optional[AffineSpace]:
+        return self._solve_internal(zeros, 0)
 
-    def solve_all(self, zeros: Zeros, max_dimension: int = 16):
-        space = self.solve_space(zeros)
+    def solve_raw_space(self, zeros: Zeros) -> Optional[AffineSpace]:
+        return self._solve_internal(zeros, 1)
+
+    def solve_all(self, zeros: Zeros, *, max_dimension: int = 16):
+        space = self.solve_raw_space(zeros)
         if space is None:
             return
         if space.dimension > max_dimension:
@@ -265,7 +268,7 @@ class LinearSystem:
                 yield ret
 
     def solve_one(self, zeros: Zeros):
-        sol = self.solve_raw(zeros, 0)
+        sol = self._solve_internal(zeros, 0)
         if sol is None:
             return
         return self.convert_sol(sol)
