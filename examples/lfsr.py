@@ -1,6 +1,7 @@
-from gf2bv import LinearSystem, BitVec
-from gf2bv.crypto.lfsr import GaloisLFSR, FibonacciLFSR
 import secrets
+
+from gf2bv import LinearSystem
+from gf2bv.crypto.lfsr import FibonacciLFSR, GaloisLFSR
 
 
 def lfsr_test(LFSR, n: int, mask: int):

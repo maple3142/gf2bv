@@ -1,9 +1,11 @@
 import random
+from contextlib import contextmanager
+from time import perf_counter
+
+from sage.all import GF, vector
+
 from gf2bv import LinearSystem
 from gf2bv.crypto.mt import MT19937
-from sage.all import vector, GF
-from time import perf_counter
-from contextlib import contextmanager
 
 
 @contextmanager

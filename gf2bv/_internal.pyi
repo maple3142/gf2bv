@@ -1,4 +1,4 @@
-from typing import Literal, overload, Optional, Iterator, TypeVar, Any
+from typing import Any, Iterator, Literal, Optional, TypeVar, overload
 
 T = TypeVar("T")
 

@@ -1,4 +1,3 @@
-import secrets
 from gf2bv import LinearSystem
 from gf2bv.crypto.xoshiro import Xoshiro256starstar
 

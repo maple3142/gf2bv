@@ -1,8 +1,10 @@
-from gf2bv import QuadraticSystem
-from gf2bv.crypto.lfsr import GaloisLFSR, FibonacciLFSR
-from tqdm import tqdm
-import secrets, itertools
+import itertools
+import secrets
 
+from tqdm import tqdm
+
+from gf2bv import QuadraticSystem
+from gf2bv.crypto.lfsr import FibonacciLFSR, GaloisLFSR
 
 n, mask = 128, 0xD670201BAC7515352A273372B2A95B23
 select = (13, 24, 35, 46, 57)

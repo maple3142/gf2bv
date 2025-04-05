@@ -1,8 +1,9 @@
-import random, time
+import random
+from contextlib import contextmanager
+from time import perf_counter
+
 from gf2bv import LinearSystem
 from gf2bv.crypto.mt import MT19937
-from time import perf_counter
-from contextlib import contextmanager
 
 
 @contextmanager

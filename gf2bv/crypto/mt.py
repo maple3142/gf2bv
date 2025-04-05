@@ -1,9 +1,10 @@
 import random
+
 from .. import BitVec
 
 
 class MersenneTwister:
-    def __init__(self, mt, w, n, m, r, a, u, d, s, b, t, c, l):
+    def __init__(self, mt, w, n, m, r, a, u, d, s, b, t, c, l):  # noqa: E741
         w1 = (1 << w) - 1
         if len(mt) != n or min(r, u, s, t, l) > w and max(a, b, c, d) > w1:
             raise ValueError("invalid parameters")

@@ -1,10 +1,15 @@
-from gf2bv import QuadraticSystem, DimensionTooLargeError
-from gf2bv.crypto.lfsr import GaloisLFSR, FibonacciLFSR
-from tqdm import trange
+import gzip
+import itertools
+import pickle
+import secrets
+import traceback
 from pathlib import Path
-import secrets, pickle, traceback, itertools, gzip
 
-from nlfsr import n, mask, select, non_linear_output
+from nlfsr import mask, n, non_linear_output, select
+from tqdm import trange
+
+from gf2bv import DimensionTooLargeError, QuadraticSystem
+from gf2bv.crypto.lfsr import FibonacciLFSR, GaloisLFSR
 
 
 def nlfsr_ex_test(LFSR):
@@ -26,7 +31,7 @@ def nlfsr_ex_test(LFSR):
             maybe_zeros = pickle.load(f)
         assert len(maybe_zeros) == N
         print("cache found, reusing...")
-    except:
+    except Exception:
         print("cache not found, generating...")
         lfsr_sys = LFSR(128, mask, x)
         maybe_zeros = []
@@ -61,7 +66,7 @@ def nlfsr_ex_test(LFSR):
         print(
             "Lucky, the number of zeros is sufficient to not result in DimensionTooLargeError"
         )
-    except DimensionTooLargeError as err:
+    except DimensionTooLargeError:
         traceback.print_exc()
         print("=" * 40)
         # Unluckily, the solution space is too large

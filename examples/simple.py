@@ -1,5 +1,6 @@
 import secrets
-from gf2bv import LinearSystem, BitVec
+
+from gf2bv import BitVec, LinearSystem
 
 
 def magic(x, y):

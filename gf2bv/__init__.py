@@ -1,16 +1,18 @@
 from __future__ import annotations
-from typing import Any, Union, Optional, Literal, TypeVar, TYPE_CHECKING
+
 from collections.abc import Sequence
 from functools import reduce
 from operator import xor
+from typing import Literal, Optional, TypeVar
+
 from ._internal import (
-    m4ri_solve,
-    to_bits,
-    mul_bit_quad,
-    xor_tuple,
-    tuple_where,
-    eqs_to_sage_mat_helper,
     AffineSpace,
+    eqs_to_sage_mat_helper,
+    m4ri_solve,
+    mul_bit_quad,
+    to_bits,
+    tuple_where,
+    xor_tuple,
 )
 
 TSolveMode = TypeVar("TSolveMode", Literal[0], Literal[1])
@@ -166,7 +168,7 @@ class LinearSystem:
         """
         Convert the system of equations to Sage, return a matrix A and a vector b such that Ax = b
         """
-        from sage.all import GF, vector, matrix
+        from sage.all import GF, matrix, vector
 
         F2 = GF(2)
         eqs = self.get_eqs(zeros)
@@ -193,9 +195,10 @@ class LinearSystem:
         """
         Convert the system of equations to Sage, return a matrix A and a vector b such that Ax = b
         """
-        from sage.all import GF, vector, matrix
-        from sage.matrix.matrix_mod2_dense import unpickle_matrix_mod2_dense_v2
         import struct
+
+        from sage.all import GF, vector
+        from sage.matrix.matrix_mod2_dense import unpickle_matrix_mod2_dense_v2
 
         F2 = GF(2)
         eqs = self.get_eqs(zeros)

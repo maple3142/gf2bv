@@ -1,5 +1,6 @@
-from .. import BitVec
 import secrets
+
+from .. import BitVec
 
 MASK64 = (1 << 64) - 1
 
