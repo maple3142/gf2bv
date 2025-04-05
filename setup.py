@@ -1,5 +1,7 @@
 from setuptools import setup, Extension, find_packages
-import os, tarfile, subprocess
+import os
+import tarfile
+import subprocess
 from urllib.request import urlopen
 from pathlib import Path
 
@@ -20,7 +22,7 @@ def download_and_build_m4ri():
             raise FileNotFoundError(f"Failed to extract {workdir}")
         subprocess.run("autoreconf --install", shell=True, cwd=workdir, check=True)
         subprocess.run(
-            f'./configure CFLAGS="-fPIC -O3 -march=native -mtune=native" --enable-openmp --enable-thread-safe',
+            './configure CFLAGS="-fPIC -O3 -march=native -mtune=native" --enable-openmp --enable-thread-safe',
             shell=True,
             cwd=workdir,
             check=True,
