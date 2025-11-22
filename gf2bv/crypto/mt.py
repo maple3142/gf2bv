@@ -65,6 +65,8 @@ class MersenneTwister:
             k = self.w
         if k < 0:
             raise ValueError("number of bits cannot be negative")
+        if k == 0:
+            return 0
         if k <= self.w:
             return self._getrandbits_word(k)
         words = (k - 1) // self.w + 1
