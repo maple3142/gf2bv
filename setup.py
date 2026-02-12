@@ -1,5 +1,6 @@
 from setuptools import setup, Extension, find_packages
 import os
+import sys
 import tarfile
 import subprocess
 from urllib.request import urlopen
@@ -30,11 +31,23 @@ def download_and_build_m4ri():
         subprocess.run("make -j", shell=True, cwd=workdir, check=True)
         if not libm4ri_a.exists():
             raise FileNotFoundError(f"Failed to build {libm4ri_a}")
+    extra_compile_args = ["-O3", "-march=native", "-mtune=native"]
+    extra_link_args = []
+    if sys.platform.startswith("darwin"):
+        # you may want to use the following line if you installed libomp via Homebrew
+        # export LDFLAGS="-L/opt/homebrew/opt/libomp/lib"
+        extra_compile_args += ["-Xpreprocessor", "-fopenmp"]
+        extra_link_args += ["-lomp"]
+    elif not sys.platform.startswith("win"):
+        extra_compile_args += ["-fopenmp"]
+        extra_link_args += ["-fopenmp"]
+    else:
+        raise NotImplementedError("Windows is not supported yet")
     return Extension(
         "gf2bv._internal",
         sources=["gf2bv/_internal.c"],
-        libraries=["gomp"],
-        extra_compile_args=["-O3", "-march=native", "-mtune=native"],
+        extra_link_args=extra_link_args,
+        extra_compile_args=extra_compile_args,
         include_dirs=[str(workdir)],
         extra_objects=[str(libm4ri_a)],
     )
