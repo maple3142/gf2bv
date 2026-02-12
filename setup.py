@@ -1,14 +1,20 @@
-from setuptools import setup, Extension, find_packages
+import hashlib
+import io
 import os
+import subprocess
 import sys
 import tarfile
-import subprocess
-from urllib.request import urlopen
 from pathlib import Path
+from urllib.request import urlopen
+
+from setuptools import Extension, find_packages, setup
 
 
 def download_and_build_m4ri():
-    release = "20250128"
+    release = "20260122"
+    checksum = bytes.fromhex(
+        "68196ed43bc2f20f8cf84433ff5d7161bf71011f2f429ce3c70b372740f4d4cf"
+    )
     workdir = Path(f"m4ri-{release}")
     libm4ri_a = workdir / ".libs" / "libm4ri.a"
     if libm4ri_a.exists():
@@ -17,7 +23,10 @@ def download_and_build_m4ri():
         with urlopen(
             f"https://github.com/malb/m4ri/archive/refs/tags/{release}.tar.gz"
         ) as source:
-            with tarfile.open(fileobj=source, mode="r|gz") as tar:
+            fobj = io.BytesIO(source.read())
+            if hashlib.sha256(fobj.getbuffer()).digest() != checksum:
+                raise ValueError("Checksum mismatch for downloaded m4ri")
+            with tarfile.open(fileobj=fobj, mode="r|gz") as tar:
                 tar.extractall()
         if not workdir.exists():
             raise FileNotFoundError(f"Failed to extract {workdir}")
